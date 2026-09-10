@@ -23,4 +23,7 @@ public class User
         = new List<PatientProfile>();
 
     public Doctor? Doctor { get; set; }
+
+    public ICollection<RefreshToken> RefreshTokens { get; set; }
+        = new List<RefreshToken>();
 }
