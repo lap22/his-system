@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
 using HIS.Api.Services.PatientProfiles;
+using HIS.Api.Services.Departments;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +96,7 @@ if (string.IsNullOrWhiteSpace(jwtSettings.Key))
 builder.Services.AddScoped<ITokenService, TokenService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 
 
 // ============================================================
