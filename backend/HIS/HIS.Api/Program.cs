@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
-
+using HIS.Api.Services.PatientProfiles;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -174,7 +174,9 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddAuthorization();
 
-
+builder.Services.AddScoped<
+    IPatientProfileService,
+    PatientProfileService>();
 // ============================================================
 // Build Application
 // ============================================================
