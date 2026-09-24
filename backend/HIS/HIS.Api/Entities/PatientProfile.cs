@@ -1,6 +1,5 @@
-﻿using HIS.Api.Enums;
-
-namespace HIS.Api.Entities;
+﻿using HIS.Api.Entities;
+using HIS.Api.Enums;
 
 public class PatientProfile
 {
@@ -20,15 +19,12 @@ public class PatientProfile
 
     public string? BloodType { get; set; }
 
-    public string? IdentityNumber { get; set; }
-
-    public string? HealthInsuranceNumber { get; set; }
-
     public RelationshipType Relationship { get; set; }
 
     public bool IsDefault { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
+        = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
 
