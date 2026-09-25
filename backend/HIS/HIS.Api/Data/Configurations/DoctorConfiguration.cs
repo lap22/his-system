@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace HIS.Api.Data.Configurations;
 
-public class DoctorConfiguration : IEntityTypeConfiguration<Doctor>
+public class DoctorConfiguration
+    : IEntityTypeConfiguration<Doctor>
 {
     public void Configure(EntityTypeBuilder<Doctor> builder)
     {
@@ -33,12 +34,23 @@ public class DoctorConfiguration : IEntityTypeConfiguration<Doctor>
         builder.Property(x => x.AvatarUrl)
             .HasMaxLength(1000);
 
-        builder.HasIndex(x => x.LicenseNumber)
-            .IsUnique();
-
+        // Một User chỉ có tối đa một Doctor profile
         builder.HasIndex(x => x.UserId)
             .IsUnique();
 
+        // Mã hành nghề không được trùng
+        builder.HasIndex(x => x.LicenseNumber)
+            .IsUnique();
+
+        builder.HasIndex(x => x.DepartmentId);
+
+        // User 1 - 0..1 Doctor
+        builder.HasOne(x => x.User)
+            .WithOne(x => x.Doctor)
+            .HasForeignKey<Doctor>(x => x.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // Department 1 - N Doctor
         builder.HasOne(x => x.Department)
             .WithMany(x => x.Doctors)
             .HasForeignKey(x => x.DepartmentId)

@@ -201,7 +201,7 @@ namespace HIS.Api.Migrations
 
                     b.HasIndex("DoctorId");
 
-                    b.ToTable("DoctorSchedules");
+                    b.ToTable("DoctorSchedules", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.MedicalRecord", b =>
@@ -279,7 +279,7 @@ namespace HIS.Api.Migrations
                     b.HasIndex("MedicalRecordId")
                         .IsUnique();
 
-                    b.ToTable("Prescriptions");
+                    b.ToTable("Prescriptions", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.PrescriptionItem", b =>
@@ -314,7 +314,7 @@ namespace HIS.Api.Migrations
 
                     b.HasIndex("PrescriptionId");
 
-                    b.ToTable("PrescriptionItems");
+                    b.ToTable("PrescriptionItems", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.QueueEntry", b =>
@@ -349,7 +349,7 @@ namespace HIS.Api.Migrations
                     b.HasIndex("AppointmentId")
                         .IsUnique();
 
-                    b.ToTable("QueueEntries");
+                    b.ToTable("QueueEntries", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.RefreshToken", b =>
