@@ -1,24 +1,31 @@
 using HIS.Api.Data;
 using HIS.Api.Middleware;
+using HIS.Api.Services;
+using HIS.Api.Services.Departments;
+using HIS.Api.Services.Doctors;
 using HIS.Api.Services.Implementations;
 using HIS.Api.Services.Interfaces;
+using HIS.Api.Services.PatientProfiles;
 using HIS.Api.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
-using HIS.Api.Services.PatientProfiles;
-using HIS.Api.Services.Departments;
-using HIS.Api.Services.Doctors;
-
+using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 // ============================================================
 // 1. Controllers
 // ============================================================
 
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter());
+    });
 
 
 // ============================================================
@@ -99,6 +106,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
+builder.Services.AddScoped<IDoctorScheduleService,DoctorScheduleService>();
 
 // ============================================================
 // 6. Authentication - JWT Bearer
