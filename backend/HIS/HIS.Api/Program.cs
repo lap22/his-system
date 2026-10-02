@@ -13,6 +13,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
 using System.Text.Json.Serialization;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // ============================================================
@@ -107,6 +108,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IDoctorScheduleService,DoctorScheduleService>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 
 // ============================================================
 // 6. Authentication - JWT Bearer
@@ -188,6 +190,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<
     IPatientProfileService,
     PatientProfileService>();
+
 // ============================================================
 // Build Application
 // ============================================================
