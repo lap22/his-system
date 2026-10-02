@@ -1,4 +1,6 @@
-﻿using HIS.Api.DTOs.Doctors;
+﻿using HIS.Api.DTOs.Appointments;
+using HIS.Api.DTOs.Doctors;
+using HIS.Api.Services;
 using HIS.Api.Services.Doctors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,12 +13,15 @@ namespace HIS.Api.Controllers;
 public class DoctorsController : ControllerBase
 {
     private readonly IDoctorService _doctorService;
-
+    private readonly IAppointmentService _appointmentService;
     public DoctorsController(
-        IDoctorService doctorService)
+        IDoctorService doctorService,
+        IAppointmentService appointmentService)
     {
         _doctorService = doctorService;
+        _appointmentService = appointmentService;
     }
+
 
     [HttpGet]
     public async Task<ActionResult<List<DoctorResponse>>>
@@ -99,5 +104,19 @@ public class DoctorsController : ControllerBase
         }
 
         return Ok(doctor);
+    }
+    [HttpGet("{doctorId:guid}/available-slots")]
+    [Authorize]
+    public async Task<ActionResult<List<AvailableSlotResponse>>>
+    GetAvailableSlots(
+        Guid doctorId,
+        [FromQuery] DateOnly date)
+    {
+        var slots =
+            await _appointmentService.GetAvailableSlotsAsync(
+                doctorId,
+                date);
+
+        return Ok(slots);
     }
 }

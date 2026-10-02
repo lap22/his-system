@@ -13,15 +13,28 @@ public class AppointmentConfiguration
 
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.AppointmentDate)
+            .IsRequired();
+
+        builder.Property(x => x.StartTime)
+            .IsRequired();
+
+        builder.Property(x => x.EndTime)
+            .IsRequired();
+
         builder.Property(x => x.Symptoms)
             .HasMaxLength(2000);
+
+        builder.Property(x => x.Status)
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
 
         builder.Property(x => x.CancellationReason)
             .HasMaxLength(1000);
 
-        builder.Property(x => x.Status)
-            .HasConversion<string>()
-            .HasMaxLength(50);
+        builder.Property(x => x.CreatedAt)
+            .IsRequired();
 
         builder.HasOne(x => x.PatientProfile)
             .WithMany(x => x.Appointments)
@@ -38,7 +51,9 @@ public class AppointmentConfiguration
             x.DoctorId,
             x.AppointmentDate,
             x.StartTime
-        });
+        })
+         .IsUnique()
+         .HasFilter("[Status] <> 'Cancelled'");
 
         builder.HasIndex(x => new
         {
