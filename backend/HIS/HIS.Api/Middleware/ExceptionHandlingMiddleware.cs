@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using HIS.Api.Exceptions;
 
 namespace HIS.Api.Middleware;
 
@@ -16,18 +17,38 @@ public class ExceptionHandlingMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(
-        HttpContext context)
+    public async Task InvokeAsync(HttpContext context)
     {
         try
         {
             await _next(context);
+        }
+        catch (QueueConcurrencyException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Queue concurrency conflict occurred."
+            );
+
+            await WriteErrorResponseAsync(
+                context,
+                HttpStatusCode.Conflict,
+                ex.Message
+            );
         }
         catch (UnauthorizedAccessException ex)
         {
             await WriteErrorResponseAsync(
                 context,
                 HttpStatusCode.Unauthorized,
+                ex.Message
+            );
+        }
+        catch (KeyNotFoundException ex)
+        {
+            await WriteErrorResponseAsync(
+                context,
+                HttpStatusCode.NotFound,
                 ex.Message
             );
         }
@@ -59,11 +80,9 @@ public class ExceptionHandlingMiddleware
         HttpStatusCode statusCode,
         string message)
     {
-        context.Response.StatusCode =
-            (int)statusCode;
+        context.Response.StatusCode = (int)statusCode;
 
-        context.Response.ContentType =
-            "application/json";
+        context.Response.ContentType = "application/json";
 
         var response = new
         {

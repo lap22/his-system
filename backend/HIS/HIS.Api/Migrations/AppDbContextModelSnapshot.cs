@@ -327,6 +327,9 @@ namespace HIS.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateOnly>("AppointmentDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid>("AppointmentId")
                         .HasColumnType("uniqueidentifier");
 
@@ -339,21 +342,37 @@ namespace HIS.Api.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("QueueNumber")
                         .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("AppointmentId")
                         .IsUnique();
 
-                    b.ToTable("QueueEntries");
+                    b.HasIndex("Status");
+
+                    b.HasIndex("DoctorId", "AppointmentDate", "QueueNumber")
+                        .IsUnique();
+
+                    b.ToTable("QueueEntries", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.RefreshToken", b =>
@@ -585,7 +604,7 @@ namespace HIS.Api.Migrations
                     b.HasOne("HIS.Api.Entities.Appointment", "Appointment")
                         .WithOne("QueueEntry")
                         .HasForeignKey("HIS.Api.Entities.QueueEntry", "AppointmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Appointment");
