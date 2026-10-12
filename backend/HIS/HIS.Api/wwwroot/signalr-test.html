@@ -1,0 +1,119 @@
+﻿
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>HIS SignalR Test</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 30px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+        }
+
+        pre {
+            background: #eee;
+            padding: 15px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h2>HIS - SignalR Queue Test</h2>
+
+    <p>JWT Access Token:</p>
+    <input id="token" type="password" placeholder="Nhập access token">
+
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+
+    <h3>Connection Status</h3>
+    <p id="status">Disconnected</p>
+
+    <h3>Realtime Events</h3>
+    <pre id="events"></pre>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+
+    <script>
+        let connection = null;
+
+        function log(message) {
+            document.getElementById("events").textContent +=
+                message + "\n";
+        }
+
+        async function connect() {
+            const token = document.getElementById("token").value.trim();
+
+            if (!token) {
+                alert("Vui lòng nhập JWT token");
+                return;
+            }
+
+            if (connection) {
+                await connection.stop();
+            }
+
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("/hubs/queue", {
+                    accessTokenFactory: () => token
+                })
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("QueueUpdated", data => {
+                log("QueueUpdated:");
+                log(JSON.stringify(data, null, 2));
+            });
+
+            connection.onreconnecting(() => {
+                document.getElementById("status").textContent =
+                    "Reconnecting...";
+            });
+
+            connection.onreconnected(() => {
+                document.getElementById("status").textContent =
+                    "Connected";
+                log("Reconnected - reload queue via REST API");
+            });
+
+            connection.onclose(() => {
+                document.getElementById("status").textContent =
+                    "Disconnected";
+            });
+
+            try {
+                await connection.start();
+
+                document.getElementById("status").textContent =
+                    "Connected";
+
+                log("Connected successfully");
+            } catch (error) {
+                log("Connection error: " + error);
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                await connection.stop();
+                connection = null;
+            }
+
+            document.getElementById("status").textContent =
+                "Disconnected";
+        }
+    </script>
+</body>
+</html>

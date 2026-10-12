@@ -22,4 +22,9 @@ public class QueueEntry
     public DateTime? CompletedAt { get; set; }
 
     public Appointment Appointment { get; set; } = null!;
+    public Guid DoctorId { get; set; }
+
+    public DateOnly AppointmentDate { get; set; }
+    public byte[] RowVersion { get; set; } = [];
+
 }

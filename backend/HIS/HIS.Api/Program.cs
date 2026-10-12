@@ -1,4 +1,5 @@
 using HIS.Api.Data;
+using HIS.Api.Hubs;
 using HIS.Api.Middleware;
 using HIS.Api.Services;
 using HIS.Api.Services.Departments;
@@ -103,12 +104,19 @@ if (string.IsNullOrWhiteSpace(jwtSettings.Key))
 // ============================================================
 
 builder.Services.AddScoped<ITokenService, TokenService>();
-
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter());
+    });
+builder.Services.AddScoped<IQueueNotifier, SignalRQueueNotifier>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IDoctorScheduleService,DoctorScheduleService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<IQueueService, QueueService>();
 
 // ============================================================
 // 6. Authentication - JWT Bearer
@@ -149,6 +157,21 @@ builder.Services
 
         options.Events = new JwtBearerEvents
         {
+            OnMessageReceived = context =>
+            {
+                var accessToken =
+                    context.Request.Query["access_token"];
+
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hubs/queue"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
             OnAuthenticationFailed = context =>
             {
                 Console.WriteLine(
@@ -240,9 +263,9 @@ app.UseAuthorization();
 // ============================================================
 // 10. Map Controllers
 // ============================================================
-
+app.UseStaticFiles();
 app.MapControllers();
-
+app.MapHub<QueueHub>("/hubs/queue");
 
 // ============================================================
 // Run Application
