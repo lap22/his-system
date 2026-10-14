@@ -1,0 +1,21 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# .NET
+bin/
+obj/
+
+# Environment / secrets
+.env
+appsettings.Local.json
+
+# Frontend
+node_modules/
+dist/
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

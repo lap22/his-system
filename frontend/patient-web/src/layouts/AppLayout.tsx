@@ -1,6 +1,7 @@
 import Dashboard from '@mui/icons-material/Dashboard'
 import LocalHospital from '@mui/icons-material/LocalHospital'
 import Logout from '@mui/icons-material/Logout'
+import People from '@mui/icons-material/People'
 import { Alert, AppBar, Box, Button, Container, Toolbar, Typography } from '@mui/material'
 import { Link as RouterLink, Outlet } from 'react-router-dom'
 import { useLogout } from '../hooks/useAuth'
@@ -14,6 +15,7 @@ export function AppLayout() {
         <LocalHospital color="primary" />
         <Typography sx={{ fontWeight: 800, flex: 1 }}>{portal.name}</Typography>
         <Button component={RouterLink} to="/" startIcon={<Dashboard />}>Dashboard</Button>
+        <Button component={RouterLink} to="/profiles" startIcon={<People />}>Profiles</Button>
         <Button startIcon={<Logout />} onClick={() => logout.mutate()} disabled={logout.isPending}>Sign out</Button>
       </Toolbar>
     </AppBar>
