@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import axios from 'axios'
 import { apiClient } from './apiClient'
 import type { PatientProfile, PatientProfileRequest } from '../types/patientProfile'
 import { patientProfileSchema, patientProfilesSchema } from '../types/patientProfile'
@@ -29,6 +30,16 @@ export const patientProfilesApi = {
   async remove(id: string): Promise<void> {
     await apiClient.delete(`${endpoint}/${id}`)
   },
+}
+
+export function profileDeletionErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error) && error.response?.status === 409) {
+    const body = z.object({ message: z.string().min(1) }).safeParse(error.response.data)
+    return body.success
+      ? body.data.message
+      : 'This patient profile cannot be deleted because it has appointment history.'
+  }
+  return profileErrorMessage(error)
 }
 
 export function profileErrorMessage(error: unknown): string {

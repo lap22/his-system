@@ -41,7 +41,7 @@ import {
   usePatientProfiles,
   useUpdatePatientProfile,
 } from '../hooks/usePatientProfiles'
-import { profileErrorMessage } from '../services/patientProfilesApi'
+import { profileDeletionErrorMessage, profileErrorMessage } from '../services/patientProfilesApi'
 import {
   bloodTypeOptions,
   genderOptions,
@@ -299,24 +299,23 @@ function DetailsDialog({ id, onClose }: { id: string | null; onClose: () => void
 
 function DeleteDialog({ profile, onClose }: { profile: PatientProfile | null; onClose: () => void }) {
   const deleteProfile = useDeletePatientProfile()
-  const confirm = async () => {
+  const confirm = () => {
     if (!profile) return
-    await deleteProfile.mutateAsync(profile.id)
-    onClose()
+    deleteProfile.mutate(profile.id, { onSuccess: onClose })
   }
 
   return (
     <Dialog fullWidth maxWidth="xs" open={Boolean(profile)} onClose={deleteProfile.isPending ? undefined : onClose}>
       <DialogTitle>Delete Profile</DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 2 }}>
-        {deleteProfile.isError ? <Alert severity="error">{profileErrorMessage(deleteProfile.error)}</Alert> : null}
+        {deleteProfile.isError ? <Alert severity="error">{profileDeletionErrorMessage(deleteProfile.error)}</Alert> : null}
         <Typography>
           Delete {profile?.fullName}? This removes the patient profile from your account.
         </Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={deleteProfile.isPending}>Cancel</Button>
-        <Button color="error" onClick={() => { void confirm() }} disabled={deleteProfile.isPending} variant="contained">
+        <Button color="error" onClick={confirm} disabled={deleteProfile.isPending} variant="contained">
           Delete
         </Button>
       </DialogActions>
@@ -481,7 +480,7 @@ export function PatientProfilesPage() {
         onClose={() => setFormState(null)}
       />
       <DetailsDialog id={detailsId} onClose={() => setDetailsId(null)} />
-      <DeleteDialog profile={deleteTarget} onClose={() => setDeleteTarget(null)} />
+      <DeleteDialog key={deleteTarget?.id ?? 'closed'} profile={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </Box>
   )
 }
