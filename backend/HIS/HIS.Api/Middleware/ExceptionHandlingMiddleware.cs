@@ -23,6 +23,14 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (PatientProfileDeletionConflictException ex)
+        {
+            await WriteErrorResponseAsync(
+                context,
+                HttpStatusCode.Conflict,
+                ex.Message
+            );
+        }
         catch (QueueConcurrencyException ex)
         {
             _logger.LogWarning(

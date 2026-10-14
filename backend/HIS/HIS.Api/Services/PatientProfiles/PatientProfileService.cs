@@ -2,6 +2,8 @@
 using HIS.Api.DTOs.PatientProfiles;
 using HIS.Api.Entities;
 using HIS.Api.Enums;
+using HIS.Api.Exceptions;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace HIS.Api.Services.PatientProfiles;
@@ -211,11 +213,31 @@ public class PatientProfileService : IPatientProfileService
             return false;
         }
 
+        if (await _dbContext.Appointments.AnyAsync(x => x.PatientProfileId == profileId))
+        {
+            throw new PatientProfileDeletionConflictException();
+        }
+
         var wasDefault = profile.IsDefault;
 
         _dbContext.PatientProfiles.Remove(profile);
 
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is SqlException sqlException &&
+            sqlException.Errors.Cast<SqlError>().Any(error =>
+                error.Number == 547 &&
+                error.Message.Contains(
+                    "FK_Appointments_PatientProfiles_PatientProfileId",
+                    StringComparison.Ordinal)))
+        {
+            // An appointment can be inserted after the pre-check; the FK remains authoritative.
+            _dbContext.Entry(profile).State = EntityState.Unchanged;
+            throw new PatientProfileDeletionConflictException(ex);
+        }
 
         if (wasDefault)
         {
