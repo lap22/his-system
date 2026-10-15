@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "incremental": false
+  },
+  "include": ["playwright.config.ts", "tests/browser/**/*.ts"]
+}
