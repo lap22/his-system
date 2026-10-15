@@ -3,6 +3,13 @@ import type { InternalAxiosRequestConfig } from 'axios'
 import { authResponseSchema } from '../types/auth'
 import { authSession } from './authSession'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    // Non-idempotent submissions must explicitly opt out of auth replay.
+    skipAuthRetry?: boolean
+  }
+}
+
 const options = {
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15_000,
@@ -53,6 +60,7 @@ apiClient.interceptors.response.use((response) => response, async (error: unknow
   const config = error.config as RetryConfig | undefined
   // 403 is a permission error; it must not refresh or log the user out.
   if (error.response?.status !== 401 || !config) throw error
+  if (config.skipAuthRetry) throw error
   const session = authSession.getSnapshot().session
   if (!session) throw error
   if (config.authUserId !== session.userId) throw error
