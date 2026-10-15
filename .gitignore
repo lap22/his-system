@@ -19,3 +19,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright artifacts and private authentication (including sessionStorage)
+**/.auth/
+**/playwright-report/
+**/test-results/

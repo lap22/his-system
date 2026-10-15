@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.playwright.json",
+    "test:auth": "playwright test --project=session",
+    "auth:manual": "node tests/browser/manual-login.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

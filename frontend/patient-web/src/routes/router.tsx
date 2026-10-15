@@ -7,6 +7,7 @@ import { RegisterPage } from '../pages/RegisterPage'
 import { NotFound } from '../pages/NotFound'
 import { PatientDashboard } from '../pages/PatientDashboard'
 import { PatientProfilesPage } from '../pages/PatientProfilesPage'
+import { DoctorsPage } from '../pages/DoctorsPage'
 
 export const router = createBrowserRouter([
   { element: <AuthBoundary publicPage />, children: [
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { index: true, element: <PatientDashboard /> },
       { path: 'dashboard', element: <Navigate replace to="/" /> },
       { path: 'profiles', element: <PatientProfilesPage /> },
+      { path: 'doctors', element: <DoctorsPage /> },
       { path: '*', element: <NotFound /> },
     ] },
   ] },

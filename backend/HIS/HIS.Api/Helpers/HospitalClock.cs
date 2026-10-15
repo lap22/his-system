@@ -9,9 +9,9 @@ public static class HospitalClock
     public static DateTime UtcNow =>
         DateTime.UtcNow;
 
+    public static DateTime LocalNow =>
+        TimeZoneInfo.ConvertTimeFromUtc(UtcNow, HospitalTimeZone);
+
     public static DateOnly Today =>
-        DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTimeFromUtc(
-                UtcNow,
-                HospitalTimeZone));
+        DateOnly.FromDateTime(LocalNow);
 }

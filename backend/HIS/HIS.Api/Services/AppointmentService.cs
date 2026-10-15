@@ -2,7 +2,10 @@
 using HIS.Api.DTOs.Appointments;
 using HIS.Api.Entities;
 using HIS.Api.Enums;
+using HIS.Api.Helpers;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace HIS.Api.Services;
 
@@ -23,11 +26,12 @@ public class AppointmentService : IAppointmentService
         if (doctorId == Guid.Empty)
             throw new InvalidOperationException("DoctorId is required.");
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
-
-        if (date < today)
-            throw new InvalidOperationException(
-                "Cannot get available slots for a past date.");
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted);
+        await AcquireBookingLockAsync(doctorId, date, "Shared");
+        var localNow = HospitalClock.LocalNow;
+        var today = DateOnly.FromDateTime(localNow);
+        var now = TimeOnly.FromDateTime(localNow);
 
         var doctor = await _dbContext.Doctors
             .AsNoTracking()
@@ -38,38 +42,26 @@ public class AppointmentService : IAppointmentService
         if (doctor is null)
             throw new KeyNotFoundException("Doctor not found.");
 
-        if (!doctor.IsActive ||
-            !doctor.User.IsActive ||
-            !doctor.Department.IsActive)
-        {
-            throw new InvalidOperationException(
-                "Doctor is currently unavailable.");
-        }
+        var doctorActive = doctor.IsActive && doctor.User.IsActive && doctor.Department.IsActive;
 
         var schedules = await _dbContext.DoctorSchedules
             .AsNoTracking()
             .Where(x =>
                 x.DoctorId == doctorId &&
-                x.DayOfWeek == date.DayOfWeek &&
-                x.IsActive)
+                x.DayOfWeek == date.DayOfWeek)
             .OrderBy(x => x.StartTime)
             .ToListAsync();
 
-        if (schedules.Count == 0)
-            return new List<AvailableSlotResponse>();
-
-        var bookedStartTimes = await _dbContext.Appointments
+        var appointments = await _dbContext.Appointments
             .AsNoTracking()
             .Where(x =>
                 x.DoctorId == doctorId &&
                 x.AppointmentDate == date &&
                 x.Status != AppointmentStatus.Cancelled)
-            .Select(x => x.StartTime)
+            .Select(x => new { x.StartTime, x.EndTime, x.Status })
             .ToListAsync();
 
-        var bookedSet = bookedStartTimes.ToHashSet();
-
-        var slots = new List<AvailableSlotResponse>();
+        var slots = new Dictionary<(TimeOnly Start, TimeOnly End), AvailableSlotResponse>();
 
         foreach (var schedule in schedules)
         {
@@ -77,24 +69,56 @@ public class AppointmentService : IAppointmentService
 
             foreach (var slot in generatedSlots)
             {
-                if (bookedSet.Contains(slot.StartTime))
-                    continue;
+                var overlapping = appointments.Where(x =>
+                    x.StartTime < slot.EndTime && x.EndTime > slot.StartTime).ToList();
+                slot.Reason = !doctorActive || !schedule.IsActive
+                    ? SlotAvailabilityReason.Inactive
+                    : overlapping.Any(x => x.Status == AppointmentStatus.Completed)
+                        ? SlotAvailabilityReason.Completed
+                        : date < today || (date == today && slot.StartTime <= now)
+                            ? SlotAvailabilityReason.Past
+                            : overlapping.Count > 0
+                                ? SlotAvailabilityReason.Full
+                                : SlotAvailabilityReason.Available;
 
-                if (date == today)
+                var key = (slot.StartTime, slot.EndTime);
+                // Prefer an active schedule over an identical inactive candidate.
+                if (!slots.TryGetValue(key, out var existing) || existing.Reason == SlotAvailabilityReason.Inactive)
                 {
-                    var now = TimeOnly.FromDateTime(DateTime.Now);
-
-                    if (slot.StartTime <= now)
-                        continue;
+                    slots[key] = slot;
                 }
-
-                slots.Add(slot);
             }
         }
 
-        return slots
+        await transaction.CommitAsync();
+        return slots.Values
             .OrderBy(x => x.StartTime)
+            .ThenBy(x => x.EndTime)
             .ToList();
+    }
+
+    private async Task AcquireBookingLockAsync(Guid doctorId, DateOnly date, string mode)
+    {
+        var lockResult = new SqlParameter("@lockResult", SqlDbType.Int)
+        {
+            Direction = ParameterDirection.Output
+        };
+        var resource = new SqlParameter("@resource", SqlDbType.NVarChar, 255)
+        {
+            Value = $"appointment-booking:{doctorId:N}:{date:yyyyMMdd}"
+        };
+        var lockMode = new SqlParameter("@mode", SqlDbType.NVarChar, 32) { Value = mode };
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            """
+            EXEC @lockResult = sp_getapplock
+                @Resource = @resource,
+                @LockMode = @mode,
+                @LockOwner = 'Transaction',
+                @LockTimeout = 10000;
+            """,
+            lockResult, resource, lockMode);
+        if ((int)lockResult.Value < 0)
+            throw new InvalidOperationException("Could not acquire appointment booking lock. Please try again.");
     }
     private static List<AvailableSlotResponse> GenerateSlots(
     DoctorSchedule schedule)
@@ -103,13 +127,16 @@ public class AppointmentService : IAppointmentService
 
         var current = schedule.StartTime;
 
+        if (schedule.SlotDurationMinutes <= 0)
+            return slots;
+
         while (slots.Count < schedule.MaxPatients)
         {
-            var slotEnd = current.AddMinutes(
-                schedule.SlotDurationMinutes);
-
-            if (slotEnd > schedule.EndTime)
+            // Check duration before TimeOnly.AddMinutes can wrap at midnight.
+            if ((schedule.EndTime.ToTimeSpan() - current.ToTimeSpan()).TotalMinutes < schedule.SlotDurationMinutes)
                 break;
+
+            var slotEnd = current.AddMinutes(schedule.SlotDurationMinutes);
 
             slots.Add(new AvailableSlotResponse
             {
@@ -164,12 +191,6 @@ public class AppointmentService : IAppointmentService
             throw new InvalidOperationException(
                 "DoctorId is required.");
 
-        var today = DateOnly.FromDateTime(DateTime.Now);
-
-        if (request.AppointmentDate < today)
-            throw new InvalidOperationException(
-                "Cannot book an appointment in the past.");
-
         // 1. Ownership
         var patientProfile = await _dbContext.PatientProfiles
             .AsNoTracking()
@@ -180,6 +201,15 @@ public class AppointmentService : IAppointmentService
         if (patientProfile is null)
             throw new KeyNotFoundException(
                 "Patient profile not found.");
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted);
+        await AcquireBookingLockAsync(request.DoctorId, request.AppointmentDate, "Exclusive");
+        var localNow = HospitalClock.LocalNow;
+        var today = DateOnly.FromDateTime(localNow);
+        var now = TimeOnly.FromDateTime(localNow);
+        if (request.AppointmentDate < today)
+            throw new InvalidOperationException("Cannot book an appointment in the past.");
 
         // 2. Doctor availability
         var doctor = await _dbContext.Doctors
@@ -212,8 +242,6 @@ public class AppointmentService : IAppointmentService
         // 4. Không đặt slot đã qua trong ngày hôm nay
         if (request.AppointmentDate == today)
         {
-            var now = TimeOnly.FromDateTime(DateTime.Now);
-
             if (request.StartTime <= now)
                 throw new InvalidOperationException(
                     "Cannot book a past appointment slot.");
@@ -224,7 +252,8 @@ public class AppointmentService : IAppointmentService
             .AnyAsync(x =>
                 x.DoctorId == request.DoctorId &&
                 x.AppointmentDate == request.AppointmentDate &&
-                x.StartTime == request.StartTime &&
+                x.StartTime < validSlot.EndTime &&
+                x.EndTime > validSlot.StartTime &&
                 x.Status != AppointmentStatus.Cancelled);
 
         if (alreadyBooked)
@@ -264,6 +293,7 @@ public class AppointmentService : IAppointmentService
                 "The selected appointment slot is no longer available.");
         }
 
+        await transaction.CommitAsync();
         return MapToResponse(
             appointment,
             patientProfile.FullName,
