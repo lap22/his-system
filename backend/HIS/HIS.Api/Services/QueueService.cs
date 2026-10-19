@@ -146,6 +146,10 @@ public class QueueService : IQueueService
                 "Appointment information has changed.");
         }
 
+        // The queue lock may have waited while confirmation changed the initial snapshot.
+        // Save must compare against the fresh Confirmed status, not that earlier value.
+        _dbContext.Entry(appointment).Property(x => x.Status).OriginalValue = latestAppointment.Status;
+
         // 7. Chặn check-in trùng.
         var alreadyCheckedIn = await _dbContext.QueueEntries
             .AnyAsync(x => x.AppointmentId == appointmentId);
@@ -184,7 +188,7 @@ public class QueueService : IQueueService
         _dbContext.QueueEntries.Add(queueEntry);
 
         // 11. Lưu dữ liệu và commit transaction.
-        await _dbContext.SaveChangesAsync();
+        await SaveQueueChangesAsync();
         await transaction.CommitAsync();
 
         // 12. Chỉ gửi SignalR sau khi commit thành công.

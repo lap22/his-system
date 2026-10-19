@@ -28,6 +28,8 @@ public class AppointmentConfiguration
         builder.Property(x => x.Status)
             .HasConversion<string>()
             .HasMaxLength(50)
+            // Guard every tracked transition against a status changed by another request.
+            .IsConcurrencyToken()
             .IsRequired();
 
         builder.Property(x => x.CancellationReason)
