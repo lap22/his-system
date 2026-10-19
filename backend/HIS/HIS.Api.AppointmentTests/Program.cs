@@ -13,6 +13,14 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
+if (args.FirstOrDefault() == "--cancellation-concurrency")
+{
+    if (args.Length != 2 || args[1] is not ("--preflight" or "--execute"))
+        throw new ArgumentException("Specify --cancellation-concurrency --preflight or --execute.");
+    await CancellationConcurrencyChecks.RunAsync(args[1] == "--execute");
+    return;
+}
+
 var apiDirectory = Path.GetFullPath(args.Length > 0 ? args[0] : "backend/HIS/HIS.Api");
 var configuration = new ConfigurationBuilder().SetBasePath(apiDirectory)
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)

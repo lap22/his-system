@@ -14,6 +14,8 @@ export const createAppointmentRequestSchema = z.object({
 })
 
 const timestampSchema = z.iso.datetime({ local: true, offset: true })
+export const appointmentStatusSchema = z.enum(['Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow'])
+export const cancelAppointmentRequestSchema = z.object({ reason: z.string().max(1000).nullable() })
 
 // Mirrors AppointmentResponse; the server determines endTime and status.
 export const appointmentSchema = z.object({
@@ -28,7 +30,7 @@ export const appointmentSchema = z.object({
   startTime: z.iso.time(),
   endTime: z.iso.time(),
   symptoms: z.string().nullable(),
-  status: z.enum(['Pending', 'Confirmed', 'CheckedIn', 'InProgress', 'Completed', 'Cancelled', 'NoShow']),
+  status: appointmentStatusSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema.nullable(),
   cancelledAt: timestampSchema.nullable(),
@@ -38,3 +40,4 @@ export const appointmentSchema = z.object({
 export type AppointmentBookingForm = z.infer<typeof appointmentBookingFormSchema>
 export type CreateAppointmentRequest = z.infer<typeof createAppointmentRequestSchema>
 export type Appointment = z.infer<typeof appointmentSchema>
+export type AppointmentStatus = z.infer<typeof appointmentStatusSchema>

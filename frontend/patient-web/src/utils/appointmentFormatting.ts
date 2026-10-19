@@ -15,3 +15,11 @@ export function normalizeAppointmentTime(time: string): string {
   const [hours, minutes, seconds = '00'] = clock.split(':')
   return `${hours}:${minutes}:${seconds}.${fraction.padEnd(7, '0')}`
 }
+
+export function formatAppointmentTimestamp(value: string): string {
+  // Backend DateTime UTC values can omit the timezone suffix after SQL loading.
+  const instant = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`
+  return new Intl.DateTimeFormat('en-GB', { timeZone: hospitalTimeZone,
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(instant))
+}
