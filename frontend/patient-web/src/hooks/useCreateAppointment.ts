@@ -5,6 +5,8 @@ import { patientProfileKeys } from './usePatientProfiles'
 
 export const appointmentKeys = {
   all: ['appointments'] as const,
+  my: (userId: string | undefined) => ['appointments', 'patient', userId, 'my'] as const,
+  patientDetail: (userId: string | undefined, id: string) => ['appointments', 'patient', userId, 'detail', id] as const,
   detail: (id: string) => ['appointments', 'detail', id] as const,
 }
 

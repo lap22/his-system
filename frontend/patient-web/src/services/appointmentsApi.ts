@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { z } from 'zod'
-import { appointmentSchema, createAppointmentRequestSchema } from '../types/appointment'
+import { appointmentSchema, cancelAppointmentRequestSchema, createAppointmentRequestSchema } from '../types/appointment'
 import type { Appointment, CreateAppointmentRequest } from '../types/appointment'
 import { apiClient } from './apiClient'
 import { normalizeAppointmentTime } from '../utils/appointmentFormatting'
@@ -14,9 +14,27 @@ class AppointmentOutcomeUnknownError extends Error {
 }
 
 export const appointmentsApi = {
-  async my(): Promise<Appointment[]> {
-    const response = await apiClient.get('/Appointments/my')
+  async my(signal?: AbortSignal): Promise<Appointment[]> {
+    const response = await apiClient.get('/Appointments/my', { signal })
     return z.array(appointmentSchema).parse(response.data)
+  },
+  async detail(id: string, signal?: AbortSignal): Promise<Appointment> {
+    const response = await apiClient.get(`/Appointments/${z.uuid().parse(id)}`, { signal })
+    const appointment = appointmentSchema.parse(response.data)
+    if (appointment.id.toLowerCase() !== id.toLowerCase()) throw new Error('Unexpected appointment reference.')
+    return appointment
+  },
+  async cancel(appointment: Appointment, reason: string): Promise<Appointment> {
+    const payload = cancelAppointmentRequestSchema.parse({ reason: reason.trim() || null })
+    const response = await apiClient.patch(`/Appointments/${z.uuid().parse(appointment.id)}/cancel`, payload, { skipAuthRetry: true })
+    const parsed = appointmentSchema.safeParse(response.data)
+    if (response.status !== 200 || !parsed.success || parsed.data.id !== appointment.id
+      || parsed.data.status !== 'Cancelled' || parsed.data.patientProfileId !== appointment.patientProfileId
+      || parsed.data.doctorId !== appointment.doctorId || parsed.data.appointmentDate !== appointment.appointmentDate
+      || normalizeAppointmentTime(parsed.data.startTime) !== normalizeAppointmentTime(appointment.startTime)) {
+      throw new Error('The cancellation response could not be verified.')
+    }
+    return parsed.data
   },
   async create(request: CreateAppointmentRequest): Promise<Appointment> {
     // Parsing also strips extra fields: endTime is never sent.
@@ -34,6 +52,28 @@ export const appointmentsApi = {
     }
     return appointment
   },
+}
+
+export function appointmentReadError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 401) return 'Your session has expired. Please sign in again.'
+    if (error.response?.status === 403) return 'You do not have permission to view these appointments.'
+    if (error.response?.status === 404) return 'This appointment was not found or is not available to your Patient account.'
+    if (!error.response) return 'The hospital service could not be reached. Check your connection and try again.'
+  }
+  return 'Appointments could not be loaded. Please refresh or try again later.'
+}
+
+export function appointmentCancellationError(error: unknown): { message: string; uncertain: boolean } {
+  if (axios.isAxiosError(error) && error.response && [400, 401, 403, 404, 409, 422].includes(error.response.status)) {
+    if (error.response.status === 401) return { message: 'Your session has expired. Sign in again before continuing.', uncertain: false }
+    if (error.response.status === 403) return { message: 'Only the Patient account that owns this appointment can cancel it.', uncertain: false }
+    if (error.response.status === 404) return { message: 'This appointment was not found or is not available to your Patient account.', uncertain: false }
+    const body = errorBodySchema.safeParse(error.response.data)
+    return { message: body.success ? body.data.message ?? 'The hospital rejected this cancellation. Refresh the current appointment status.'
+      : 'The hospital rejected this cancellation. Refresh the current appointment status.', uncertain: false }
+  }
+  return { message: 'The cancellation outcome is uncertain. Check the current status before taking further action. Do not submit another cancellation.', uncertain: true }
 }
 
 const errorBodySchema = z.object({
