@@ -390,7 +390,27 @@ public class AppointmentService : IAppointmentService
 
         appointment.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Do not retry a stale cancellation or overwrite the winning transition.
+            var currentStatus = await _dbContext.Appointments
+                .AsNoTracking()
+                .Where(x => x.Id == appointmentId &&
+                    x.PatientProfile.UserId == currentUserId)
+                .Select(x => (AppointmentStatus?)x.Status)
+                .SingleOrDefaultAsync();
+
+            if (currentStatus is null)
+                return null;
+
+            throw new InvalidOperationException(currentStatus == AppointmentStatus.Cancelled
+                ? "Appointment is already cancelled."
+                : "This appointment can no longer be cancelled.");
+        }
 
         return MapToResponse(
             appointment,
@@ -517,7 +537,15 @@ public class AppointmentService : IAppointmentService
         appointment.Status = AppointmentStatus.Confirmed;
         appointment.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new InvalidOperationException(
+                "Only pending appointments can be confirmed.");
+        }
 
         return MapToResponse(
             appointment,
