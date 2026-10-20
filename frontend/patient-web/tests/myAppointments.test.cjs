@@ -54,6 +54,41 @@ test('only the two statuses permitted by the backend are cancellation candidates
     assert.ok(rules.appointmentStatusLabels[status])
   }
 })
+
+const profileAppointments = [
+  { id: 'A1', patientProfileId: 'profile-a', patientName: 'Same name', status: 'Completed', appointmentDate: '2026-10-22', startTime: '09:00:00', endTime: '09:30:00' },
+  { id: 'A2', patientProfileId: 'profile-a', patientName: 'Same name', status: 'Cancelled', appointmentDate: '2026-10-22', startTime: '10:00:00', endTime: '10:30:00' },
+  { id: 'B1', patientProfileId: 'profile-b', patientName: 'Same name', status: 'Completed', appointmentDate: '2026-10-22', startTime: '11:00:00', endTime: '11:30:00' },
+]
+
+test('profile history isolates A1/A2 from B1 by PatientProfile ID, even with identical patient names', () => {
+  const original = structuredClone(profileAppointments)
+  const ids = (profile) => rules.selectAppointments(profileAppointments, 'history', 'All', now, profile).map((a) => a.id)
+  assert.deepEqual(ids('profile-a'), ['A2', 'A1'])
+  assert.deepEqual(ids('profile-b'), ['B1'])
+  assert.deepEqual(ids('All'), ['B1', 'A2', 'A1'])
+  assert.deepEqual(rules.selectAppointments(profileAppointments, 'history', 'All', now).map((a) => a.id), ids('All'))
+  assert.deepEqual(profileAppointments, original)
+})
+
+test('profile selection composes with both appointment periods, status filters and counts', () => {
+  const appointments = profileAppointments.map((a) => ({ ...a, status: a.id === 'A1' ? 'Pending' : a.id === 'B1' ? 'Confirmed' : a.status }))
+  const select = (period, status, profile) => rules.selectAppointments(appointments, period, status, now, profile)
+  assert.deepEqual(select('upcoming', 'All', 'profile-a').map((a) => a.id), ['A1'])
+  assert.deepEqual(select('history', 'All', 'profile-a').map((a) => a.id), ['A2'])
+  assert.deepEqual(select('upcoming', 'All', 'profile-b').map((a) => a.id), ['B1'])
+  assert.equal(select('history', 'All', 'profile-b').length, 0)
+  assert.equal(select('upcoming', 'Pending', 'profile-b').length, 0)
+  assert.equal(select('upcoming', 'Confirmed', 'profile-a').length, 0)
+  assert.equal(select('history', 'Cancelled', 'profile-a').length, 1)
+  assert.equal(select('upcoming', 'All', 'All').length, 2)
+})
+
+test('unknown profile IDs and account User IDs do not fall back to all profiles', () => {
+  for (const id of ['another-accounts-profile', 'account-user-id', '']) {
+    assert.deepEqual(rules.selectAppointments(profileAppointments, 'history', 'All', now, id), [])
+  }
+})
 test('UTC SQL timestamps and explicit offsets format identically across hospital midnight', () => {
   const expected = formatting.formatAppointmentTimestamp('2026-10-18T18:30:00Z')
   assert.equal(formatting.formatAppointmentTimestamp('2026-10-18T18:30:00'), expected)
