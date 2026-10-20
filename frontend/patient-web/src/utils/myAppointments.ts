@@ -17,8 +17,9 @@ export function appointmentPeriod(appointment: Pick<Appointment, 'status' | 'app
   return end > now ? 'upcoming' : 'history'
 }
 
-export function selectAppointments(appointments: Appointment[], period: AppointmentPeriod, status: AppointmentStatus | 'All', now: number): Appointment[] {
-  return appointments.filter((appointment) => appointmentPeriod(appointment, now) === period && (status === 'All' || appointment.status === status))
+export function selectAppointments(appointments: Appointment[], period: AppointmentPeriod, status: AppointmentStatus | 'All', now: number, patientProfileId = 'All'): Appointment[] {
+  return appointments.filter((appointment) => (patientProfileId === 'All' || appointment.patientProfileId === patientProfileId)
+    && appointmentPeriod(appointment, now) === period && (status === 'All' || appointment.status === status))
     .sort((a, b) => {
       const order = a.appointmentDate.localeCompare(b.appointmentDate)
         || normalizeAppointmentTime(a.startTime).localeCompare(normalizeAppointmentTime(b.startTime))
