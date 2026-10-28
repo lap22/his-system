@@ -13,6 +13,17 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
+if (args is ["--clinical-model"])
+{
+    try { ClinicalModelChecks.Run(); }
+    catch (Exception error)
+    {
+        Console.Error.WriteLine(error.Message);
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
 if (args.FirstOrDefault() == "--cancellation-concurrency")
 {
     if (args.Length != 2 || args[1] is not ("--preflight" or "--execute"))

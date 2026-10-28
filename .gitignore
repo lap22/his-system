@@ -24,3 +24,19 @@ Thumbs.db
 **/.auth/
 **/playwright-report/
 **/test-results/
+# Local clinical migration / recovery tooling
+/backend/HIS/HIS.ClinicalMigrationRunner/
+/backend/HIS/HIS.ClinicalMigrationRunner.Tests/
+/backend/HIS/HIS.ClinicalMigrationTestRunner/
+/backend/HIS/HIS.ClinicalMigrationTestRunner.Tests/
+/backend/HIS/HIS.MigrationTestReadOnlyAdapter/
+/backend/HIS/HIS.MigrationTestReadOnlyAdapter.Tests/
+/backend/HIS/HIS.RestoredDatabaseVerifier/
+/backend/HIS/HIS.RestoredDatabaseVerifier.Tests/
+
+# Generated HIS verification evidence
+/backend/HIS/backup-verification-*.json
+/backend/HIS/baseline-v2-CANDIDATE-REPORT-*.json
+/backend/HIS/clone-verification-*.json
+/backend/HIS/migration-test-provisioning-*.json
+/backend/HIS/restore-verification-*.json
