@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "test": "node tests/doctorPortal.test.cjs && node tests/doctorAppointments.test.cjs && node tests/doctorQueue.test.cjs && node tests/doctorIntegration.test.cjs",
+    "test:integration": "node tests/doctorIntegration.test.cjs",
+    "test:browser:mocked": "node tests/doctorBrowser.mocked.cjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

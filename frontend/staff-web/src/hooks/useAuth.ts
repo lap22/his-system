@@ -15,13 +15,18 @@ export function restoreAuth() {
       authSession.setSession(session, false)
     }
     authSession.restoring()
+    const restoringAccount = authSession.getAccountGeneration()
     try {
       if (Date.parse(session.accessTokenExpiresAt) <= Date.now()) await refreshSession()
       const expectedUserId = authSession.getSnapshot().session?.userId
+      const account = authSession.getAccountGeneration()
       const user = await authApi.me()
-      if (authSession.getSnapshot().session?.userId === expectedUserId) authSession.setUser(user)
+      if (authSession.getAccountGeneration() === account && authSession.getSnapshot().session?.userId === expectedUserId) {
+        if (user.userId !== expectedUserId || user.role !== authSession.getSnapshot().session?.role) throw new Error('Session identity mismatch.')
+        authSession.setUser(user)
+      }
     } catch {
-      if (authSession.getSnapshot().session) authSession.unavailable()
+      if (authSession.getAccountGeneration() === restoringAccount && authSession.getSnapshot().session) authSession.unavailable()
     }
   })().finally(() => { restoring = null })
   return restoring

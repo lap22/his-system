@@ -3,6 +3,8 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { restoreAuth, useAuth, useLogout } from '../hooks/useAuth'
 import { portal } from '../services/portal'
 import { PortalMismatch } from './PortalMismatch'
+import { authSession } from '../services/authSession'
+import { loginDestination } from '../services/doctorAccess'
 
 export function AuthBoundary({ publicPage = false }: { publicPage?: boolean }) {
   const auth = useAuth()
@@ -10,11 +12,11 @@ export function AuthBoundary({ publicPage = false }: { publicPage?: boolean }) {
   const location = useLocation()
   if (auth.status === 'restoring') return <Box sx={{ p: 6, textAlign: 'center' }}><CircularProgress aria-label="Restoring session" /></Box>
   if (auth.status === 'unavailable') return <Box sx={{ p: 3 }}><Alert severity="warning">Your session could not be verified. Please retry when the service is available.</Alert><Button onClick={() => { void restoreAuth() }}>Retry</Button><Button onClick={() => logout.mutate()}>Sign out</Button></Box>
-  if (!auth.user) return publicPage ? <Outlet /> : <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!auth.user) return publicPage ? <Outlet /> : <Navigate to="/login" replace state={{ from: location.pathname, generation: authSession.getGeneration(), userId: auth.session?.userId ?? null }} />
+  if (!['Patient', 'Doctor', 'Admin'].includes(auth.user.role)) return <Alert severity="error">This account role is not supported.</Alert>
   if (!portal.roles.includes(auth.user.role)) return <PortalMismatch />
   if (publicPage) {
-    const from: unknown = location.state?.from
-    const destination = from === '/dashboard' ? '/dashboard' : '/'
+    const destination = loginDestination(auth.user.role, location.state, authSession.getGeneration(), auth.user.userId)
     return <Navigate to={destination} replace />
   }
   return <Outlet />

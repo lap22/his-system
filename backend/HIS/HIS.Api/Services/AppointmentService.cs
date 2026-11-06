@@ -18,6 +18,21 @@ public class AppointmentService : IAppointmentService
         _dbContext = dbContext;
     }
 
+    private async Task<Guid> GetActiveDoctorIdAsync(Guid currentUserId)
+    {
+        var doctorId = await _dbContext.Doctors
+            .AsNoTracking()
+            .Where(x =>
+                x.UserId == currentUserId &&
+                x.IsActive)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync();
+
+        // Match the Queue service's resource-concealment convention for
+        // missing, foreign and inactive Doctor profiles.
+        return DoctorAppointmentAccess.RequireActiveDoctorId(doctorId);
+    }
+
     // Implement các method ở các bước tiếp theo
     public async Task<List<AvailableSlotResponse>> GetAvailableSlotsAsync(
     Guid doctorId,
@@ -436,8 +451,10 @@ public class AppointmentService : IAppointmentService
         }
         else if (currentUserRole == UserRole.Doctor.ToString())
         {
+            var doctorId = await GetActiveDoctorIdAsync(currentUserId);
+
             query = query.Where(x =>
-                x.Doctor.UserId == currentUserId);
+                x.DoctorId == doctorId);
         }
         else if (currentUserRole != UserRole.Admin.ToString())
         {
@@ -460,21 +477,14 @@ public class AppointmentService : IAppointmentService
     DateOnly? date,
     AppointmentStatus? status)
     {
-        var doctor = await _dbContext.Doctors
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x =>
-                x.UserId == currentUserId);
-
-        if (doctor is null)
-            throw new KeyNotFoundException(
-                "Doctor profile not found.");
+        var doctorId = await GetActiveDoctorIdAsync(currentUserId);
 
         var query = _dbContext.Appointments
             .AsNoTracking()
             .Include(x => x.PatientProfile)
             .Include(x => x.Doctor)
                 .ThenInclude(x => x.Department)
-            .Where(x => x.DoctorId == doctor.Id);
+            .Where(x => x.DoctorId == doctorId);
 
         if (date.HasValue)
         {
@@ -513,8 +523,10 @@ public class AppointmentService : IAppointmentService
 
         if (currentUserRole == UserRole.Doctor.ToString())
         {
+            var doctorId = await GetActiveDoctorIdAsync(currentUserId);
+
             query = query.Where(x =>
-                x.Doctor.UserId == currentUserId);
+                x.DoctorId == doctorId);
         }
         else if (currentUserRole != UserRole.Admin.ToString())
         {
