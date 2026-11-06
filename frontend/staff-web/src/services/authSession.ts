@@ -10,6 +10,7 @@ type State = {
 }
 let state: State = { session: null, user: null, status: 'restoring' }
 let generation = 0
+let accountGeneration = 0
 const listeners = new Set<() => void>()
 function publish(next: State) {
   state = next
@@ -22,6 +23,7 @@ export const authSession = {
   },
   getSnapshot: () => state,
   getGeneration: () => generation,
+  getAccountGeneration: () => accountGeneration,
   readStored() {
     try {
       const value = sessionStorage.getItem(storageKey)
@@ -33,6 +35,7 @@ export const authSession = {
   },
   setSession(session: AuthResponse, authenticated = true) {
     const { userId, email, role } = session
+    if (state.session?.userId !== userId || state.session?.role !== role) accountGeneration += 1
     generation += 1
     try { sessionStorage.setItem(storageKey, JSON.stringify(session)) } catch { /* Memory-only session remains usable. */ }
     publish({ session, user: authenticated ? { userId, email, role } : null, status: authenticated ? 'authenticated' : 'restoring' })
@@ -45,6 +48,7 @@ export const authSession = {
   setNotice(notice: string) { publish({ ...state, notice }) },
   clear() {
     generation += 1
+    accountGeneration += 1
     try { sessionStorage.removeItem(storageKey) } catch { /* Clear in-memory credentials regardless. */ }
     publish({ session: null, user: null, status: 'anonymous' })
   },

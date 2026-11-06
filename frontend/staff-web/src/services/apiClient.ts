@@ -3,6 +3,12 @@ import type { InternalAxiosRequestConfig } from 'axios'
 import { authResponseSchema } from '../types/auth'
 import { authSession } from './authSession'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipAuthRetry?: boolean
+  }
+}
+
 const options = {
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15_000,
@@ -11,7 +17,7 @@ const options = {
 // Auth endpoints use a separate client so refresh never intercepts itself.
 export const authClient = axios.create(options)
 export const apiClient = axios.create(options)
-type RetryConfig = InternalAxiosRequestConfig & { authRetried?: boolean; authGeneration?: number; authUserId?: string }
+type RetryConfig = InternalAxiosRequestConfig & { authRetried?: boolean; authGeneration?: number; authUserId?: string; authAccountGeneration?: number }
 let refreshing: Promise<void> | null = null
 
 export function refreshSession(): Promise<void> {
@@ -43,19 +49,27 @@ export function refreshSession(): Promise<void> {
 apiClient.interceptors.request.use((config: RetryConfig) => {
   const session = authSession.getSnapshot().session
   config.authGeneration = authSession.getGeneration()
+  config.authAccountGeneration = authSession.getAccountGeneration()
   config.authUserId = session?.userId
   if (session) config.headers.set('Authorization', 'Bearer ' + session.accessToken)
   else config.headers.delete('Authorization')
   return config
 })
-apiClient.interceptors.response.use((response) => response, async (error: unknown) => {
+apiClient.interceptors.response.use((response) => {
+  const config = response.config as RetryConfig
+  if (config.authAccountGeneration !== authSession.getAccountGeneration()) throw new Error('Session changed. Refresh this page.')
+  return response
+}, async (error: unknown) => {
   if (!axios.isAxiosError(error)) throw error
   const config = error.config as RetryConfig | undefined
   // 403 is a permission error; it must not refresh or log the user out.
   if (error.response?.status !== 401 || !config) throw error
+  // Only reads may be replayed. Mutations must reconcile their outcome through GET.
+  if (config.skipAuthRetry || !['get', 'head', 'options'].includes(config.method?.toLowerCase() ?? 'get')) throw error
   const session = authSession.getSnapshot().session
   if (!session) throw error
   if (config.authUserId !== session.userId) throw error
+  if (config.authAccountGeneration !== authSession.getAccountGeneration()) throw error
   if (config.authRetried) {
     if (config.authGeneration === authSession.getGeneration()) authSession.clear()
     throw error
@@ -63,7 +77,7 @@ apiClient.interceptors.response.use((response) => response, async (error: unknow
   const sentToken = config.headers.get('Authorization')
   config.authRetried = true
   if (sentToken === 'Bearer ' + session.accessToken) await refreshSession()
-  if (!authSession.getSnapshot().session) throw error
+  if (!authSession.getSnapshot().session || config.authAccountGeneration !== authSession.getAccountGeneration()) throw error
   return apiClient.request(config)
 })
 

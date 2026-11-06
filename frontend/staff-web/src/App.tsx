@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './routes/router'
 import { healthcareTheme } from './theme/healthcareTheme'
+import { bindAuthCache } from './services/authCache'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,6 +13,8 @@ const queryClient = new QueryClient({
     },
   },
 })
+const unbindAuthCache = bindAuthCache(queryClient)
+if (import.meta.hot) import.meta.hot.dispose(unbindAuthCache)
 
 export default function App() {
   return (

@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5174,
       proxy: {
+        '/hubs/queue': {
+          target: env.API_PROXY_TARGET || 'http://localhost:5216',
+          changeOrigin: true,
+          ws: true,
+          secure: !['localhost', '127.0.0.1'].includes(new URL(env.API_PROXY_TARGET || 'http://localhost:5216').hostname),
+        },
         '/api': {
           target: env.API_PROXY_TARGET || 'http://localhost:5216',
           changeOrigin: true,

@@ -1,5 +1,5 @@
 import LocalHospital from '@mui/icons-material/LocalHospital'
-import { Box, Container, Link, Typography } from '@mui/material'
+import { Box, Container, Typography } from '@mui/material'
 import { Outlet } from 'react-router-dom'
 import { portal } from '../services/portal'
 export function AuthLayout() {
