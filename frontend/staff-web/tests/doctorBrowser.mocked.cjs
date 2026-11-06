@@ -8,6 +8,7 @@ const baseUrl = `http://127.0.0.1:${port}`
 const userId = '11111111-1111-4111-8111-111111111111'
 const doctorId = '22222222-2222-4222-8222-222222222222'
 const appointmentId = '33333333-3333-4333-8333-333333333333'
+const clinicalAppointmentId = '66666666-6666-4666-8666-666666666666'
 const profileId = '44444444-4444-4444-8444-444444444444'
 const departmentId = '55555555-5555-4555-8555-555555555555'
 
@@ -19,6 +20,7 @@ const appointment = { id: appointmentId, patientProfileId: profileId, patientNam
   doctorName: doctor.fullName, departmentId, departmentName: doctor.departmentName, appointmentDate: '2026-10-29',
   startTime: '09:00:00', endTime: '09:30:00', symptoms: 'Synthetic browser-only symptoms', status: 'Pending',
   createdAt: '2026-10-20T01:00:00Z', updatedAt: null, cancelledAt: null, cancellationReason: null }
+const clinicalAppointment = { ...appointment, id: clinicalAppointmentId, status: 'InProgress' }
 
 async function waitForServer() {
   for (let i = 0; i < 80; i++) {
@@ -38,7 +40,8 @@ async function installMocks(page, role = 'Doctor') {
     const body = url.pathname.toLowerCase() === '/api/auth/me' ? { userId, email: `${role.toLowerCase()}@example.invalid`, role }
       : url.pathname.toLowerCase() === '/api/doctors' ? [doctor]
         : url.pathname.toLowerCase() === `/api/appointments/${appointmentId}` ? appointment
-          : url.pathname.toLowerCase() === '/api/appointments' ? [appointment]
+          : url.pathname.toLowerCase() === `/api/appointments/${clinicalAppointmentId}` ? clinicalAppointment
+            : url.pathname.toLowerCase() === '/api/appointments' ? [appointment, clinicalAppointment]
             : null
     assert.notEqual(body, null, `Unexpected API request: ${url.pathname}`)
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
@@ -99,6 +102,24 @@ async function run() {
     assert.equal(await trigger.evaluate(node => node === document.activeElement), true, 'focus must return to the confirmation trigger')
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true,
       'mobile layout must not overflow horizontally')
+
+    await page.goto(`${baseUrl}/doctor/appointments/${clinicalAppointmentId}/clinical`)
+    await page.getByRole('heading', { name: 'Clinical Examination', level: 1 }).waitFor()
+    await page.getByLabel('Chief Complaint (required to finalize)').fill('Persistent headache')
+    await page.getByLabel('Diagnosis (required to finalize)').fill('Clinical review pending')
+    const reviewTrigger = page.getByRole('button', { name: 'Review entered information' })
+    await reviewTrigger.click()
+    const reviewDialog = page.getByRole('dialog', { name: 'Review clinical information' })
+    await reviewDialog.waitFor()
+    assert.equal(await reviewDialog.evaluate(node => node.contains(document.activeElement)), true)
+    await page.keyboard.press('Escape')
+    await reviewDialog.waitFor({ state: 'hidden' })
+    assert.equal(await reviewTrigger.evaluate(node => node === document.activeElement), true)
+    assert.equal(await page.getByRole('button', { name: 'Save Draft unavailable' }).isDisabled(), true)
+    assert.equal(await page.getByRole('button', { name: 'Finalize unavailable' }).isDisabled(), true)
+    await page.getByRole('link', { name: 'Back to appointment' }).first().click()
+    await page.getByRole('dialog', { name: 'Discard unsaved clinical content?' }).waitFor()
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true)
     assert.equal(requests.some(value => !value.startsWith('GET ')), false)
     await mobile.close()
   } finally {
@@ -107,7 +128,7 @@ async function run() {
     await new Promise(resolve => { if (server.exitCode !== null) resolve(); else { server.once('exit', resolve); setTimeout(resolve, 3000) } })
   }
   if (serverErrors && !/ExperimentalWarning/.test(serverErrors)) process.stderr.write(serverErrors)
-  console.log('Mocked browser acceptance: 3/3 PASS (anonymous guard, Admin denial, Doctor mobile/dialog focus).')
+  console.log('Mocked browser acceptance: 4/4 PASS (guards, Doctor mobile, confirmation focus, clinical workspace safety).')
 }
 
 run().catch(error => { console.error(error instanceof Error ? error.message : 'Mocked browser acceptance failed.'); process.exitCode = 1 })

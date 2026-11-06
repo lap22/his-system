@@ -305,13 +305,13 @@ test('legacy landing redirects Doctor only and preserves Admin dashboard', () =>
   assert.equal(StaffLanding().props.to, '/doctor/dashboard')
 })
 
-test('route tree includes all five Doctor pages and retains staff compatibility', () => {
+test('route tree includes all six Doctor pages and retains staff compatibility', () => {
   const load = loader({ 'react-router-dom': { createBrowserRouter: routes => routes, Navigate: 'redirect' } })
   const { router } = load('src/routes/router.tsx')
   const secured = router.find(route => route.errorElement)
   const doctorRoutes = secured.children.find(route => route.children?.[0]?.path === '/doctor').children[0]
   assert.deepEqual(doctorRoutes.children.filter(route => route.path).map(route => route.path),
-    ['dashboard', 'appointments', 'appointments/:id', 'schedule', 'queue'])
+    ['dashboard', 'appointments', 'appointments/:id', 'appointments/:appointmentId/clinical', 'schedule', 'queue'])
   assert.ok(secured.children.some(route => route.path === '/'))
 })
 
