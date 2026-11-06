@@ -4,6 +4,7 @@ import Logout from '@mui/icons-material/Logout'
 import People from '@mui/icons-material/People'
 import MedicalServices from '@mui/icons-material/MedicalServices'
 import EventNote from '@mui/icons-material/EventNote'
+import HistoryEdu from '@mui/icons-material/HistoryEdu'
 import { Alert, AppBar, Box, Button, Container, Toolbar, Typography } from '@mui/material'
 import { Link as RouterLink, Outlet } from 'react-router-dom'
 import { useAuth, useLogout } from '../hooks/useAuth'
@@ -25,6 +26,7 @@ export function AppLayout() {
         <Button component={RouterLink} to="/profiles" startIcon={<People />}>Profiles</Button>
         <Button component={RouterLink} to="/doctors" startIcon={<MedicalServices />}>Find a Doctor</Button>
         <Button component={RouterLink} to="/appointments" startIcon={<EventNote />}>My Appointments</Button>
+        <Button component={RouterLink} to="/medical-history" startIcon={<HistoryEdu />}>Medical History / Hồ sơ bệnh án</Button>
         <Button startIcon={<Logout />} onClick={() => logout.mutate()} disabled={logout.isPending}>Sign out</Button>
       </Toolbar>
     </AppBar>

@@ -53,7 +53,8 @@ function AppointmentDetails({ id }: { id: string }) {
         {row.updatedAt && <Information label="Last updated (hospital time)" value={formatTimestamp(row.updatedAt)} />}
       </Box>
       {row.status === 'Pending' && <Button variant="contained" disabled={!canConfirm} onClick={event => { trigger.current = event.currentTarget; setReviewed(row) }}>Confirm appointment</Button>}
-      <Typography color="text.secondary">Only Pending appointments can be confirmed. The hospital validates ownership and current status again.</Typography>
+      {row.status === 'InProgress' && <Button component={Link} to={`/doctor/appointments/${row.id}/clinical`} variant="contained">Open Clinical Examination</Button>}
+      {row.status === 'Pending' && <Typography color="text.secondary">Only Pending appointments can be confirmed. The hospital validates ownership and current status again.</Typography>}
     </CardContent></Card>}
     <Dialog open={reviewed !== null} onClose={close} fullWidth maxWidth="sm" aria-labelledby="doctor-confirm-title"
       disableRestoreFocus slotProps={{ transition: { onExited: restoreFocus } }}>
