@@ -167,10 +167,10 @@ test('dashboard and appointment list derive consistent hospital-local ordering f
 
 test('route source uses lazy Doctor chunks while retaining all protected deep links', () => {
   const source = readFileSync(path.resolve(__dirname, '../src/routes/router.tsx'), 'utf8')
-  for (const route of ['dashboard', 'appointments', 'appointments/:id', 'schedule', 'queue']) {
+  for (const route of ['dashboard', 'appointments', 'appointments/:id', 'appointments/:appointmentId/clinical', 'schedule', 'queue']) {
     assert.match(source, new RegExp(`path: '${route.replace('/', '\\/')}'`))
   }
-  assert.equal((source.match(/lazy: async/g) ?? []).length, 6)
+  assert.equal((source.match(/lazy: async/g) ?? []).length, 7)
   assert.match(source, /element: <DoctorBoundary \/>/)
   assert.doesNotMatch(source, /import \{ DoctorDashboard \}/)
   assert.doesNotMatch(source, /import \{ DoctorQueuePage \}/)

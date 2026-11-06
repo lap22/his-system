@@ -33,6 +33,9 @@ export const router = createBrowserRouter([
         { path: 'appointments/:id', hydrateFallbackElement: doctorRouteFallback, lazy: async () => ({
           Component: (await import('../pages/DoctorAppointmentDetailsPage')).DoctorAppointmentDetailsPage,
         }) },
+        { path: 'appointments/:appointmentId/clinical', hydrateFallbackElement: doctorRouteFallback, lazy: async () => ({
+          Component: (await import('../pages/ClinicalExaminationPage')).ClinicalExaminationPage,
+        }) },
         { path: 'schedule', hydrateFallbackElement: doctorRouteFallback, lazy: async () => ({
           Component: (await import('../pages/DoctorSchedulePage')).DoctorSchedulePage,
         }) },

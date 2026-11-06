@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.playwright.json",
+    "test": "node tests/doctorDirectory.test.cjs && node tests/myAppointments.test.cjs && node tests/patientDashboard.test.cjs && node tests/medicalHistory.test.cjs",
+    "test:medical-history": "node tests/medicalHistory.test.cjs",
     "test:auth": "playwright test --project=session",
     "auth:manual": "node tests/browser/manual-login.mjs"
   },
