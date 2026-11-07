@@ -1,7 +1,13 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using HIS.Api.Data;
 using HIS.Api.DTOs.MedicalRecords;
+using HIS.Api.Entities;
+using HIS.Api.Enums;
 using HIS.Api.Services.Clinical;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 var passed = 0;
 void Check(bool condition, string name)
@@ -70,6 +76,43 @@ Check(error is RowVersionTokenException &&
       error.Message == "The concurrency token is invalid." &&
       !error.Message.Contains("private-clinical-text", StringComparison.Ordinal),
     "Conversion errors contain no input or clinical data");
+
+var options = new DbContextOptionsBuilder<AppDbContext>()
+    .UseSqlServer("Server=offline.invalid;Database=offline_model_only;Integrated Security=true;Encrypt=true")
+    .Options;
+using var context = new AppDbContext(options);
+var designModel = context.GetService<IDesignTimeModel>().Model;
+var medicalRecord = designModel.FindEntityType(typeof(MedicalRecord))
+    ?? throw new InvalidOperationException("MedicalRecord is missing from the EF model.");
+var chiefComplaint = medicalRecord.FindProperty(nameof(MedicalRecord.ChiefComplaint));
+var diagnosis = medicalRecord.FindProperty(nameof(MedicalRecord.Diagnosis));
+var status = medicalRecord.FindProperty(nameof(MedicalRecord.Status));
+var rowVersion = medicalRecord.FindProperty(nameof(MedicalRecord.RowVersion));
+Check(chiefComplaint?.IsNullable == true && diagnosis?.IsNullable == true,
+    "EF model permits incomplete Draft clinical text");
+Check((status?.GetProviderClrType() == typeof(string) ||
+       status?.GetValueConverter()?.ProviderClrType == typeof(string)) &&
+      status.GetDefaultValue()?.Equals(MedicalRecordStatus.Draft) == true,
+    "EF model stores the clinical status as the approved string representation");
+Check(rowVersion?.IsConcurrencyToken == true && rowVersion.ValueGenerated == ValueGenerated.OnAddOrUpdate,
+    "EF model configures MedicalRecord RowVersion concurrency");
+var constraints = medicalRecord.GetCheckConstraints().ToDictionary(x => x.Name!, x => x.Sql);
+Check(constraints.TryGetValue("CK_MedicalRecords_FinalizationLifecycle", out var lifecycleSql) &&
+      lifecycleSql == MedicalRecordSchemaContract.LifecycleCheckSql &&
+      constraints.ContainsKey("CK_MedicalRecords_Status") &&
+      !constraints.ContainsKey("CK_MedicalRecords_ChiefComplaint_NotBlank"),
+    "EF checks enforce finalization requirements without rejecting empty Drafts");
+var appointmentForeignKey = medicalRecord.GetForeignKeys().Single(x => x.PrincipalEntityType.ClrType == typeof(Appointment));
+Check(appointmentForeignKey.Properties.Select(x => x.Name).SequenceEqual([
+          nameof(MedicalRecord.AppointmentId),
+          nameof(MedicalRecord.PatientProfileId),
+          nameof(MedicalRecord.DoctorId)]) &&
+      appointmentForeignKey.DeleteBehavior == DeleteBehavior.NoAction,
+    "EF model binds the record to the exact appointment ownership tuple with NO ACTION delete");
+Check(designModel.FindEntityType(typeof(ClinicalAuditEvent)) is not null &&
+      designModel.FindEntityType(typeof(Prescription)) is not null &&
+      designModel.FindEntityType(typeof(PrescriptionItem)) is not null,
+    "Clinical audit and prescription entities are present in the offline EF model");
 
 Console.WriteLine($"Clinical schema reconciliation checks: {passed}/{passed} PASS");
 
