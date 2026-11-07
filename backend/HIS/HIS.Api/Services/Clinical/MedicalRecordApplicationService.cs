@@ -8,7 +8,7 @@ namespace HIS.Api.Services.Clinical;
 // the protected schema and a production EF store receive separate approval.
 public sealed class MedicalRecordApplicationService(
     IClinicalWorkflowStore store,
-    IClinicalClock clock)
+    IClinicalClock clock) : IMedicalRecordApplicationService
 {
     public const bool AutomaticallyRetryMutations = false;
 
@@ -159,13 +159,15 @@ public sealed class MedicalRecordApplicationService(
     private static void RequireAllowed(MedicalRecordPolicyResult result)
     {
         if (result.Allowed) return;
-        throw Fail(result.Failure is MedicalRecordPolicyFailure.RecordAlreadyExists or
+        throw Fail(result.Failure switch
+        {
+            MedicalRecordPolicyFailure.RecordAlreadyExists or
+            MedicalRecordPolicyFailure.StaleConcurrencyToken => ClinicalWorkflowFailure.Conflict,
+            MedicalRecordPolicyFailure.MissingConcurrencyToken => ClinicalWorkflowFailure.InvalidRequest,
             MedicalRecordPolicyFailure.RecordNotDraft or
-            MedicalRecordPolicyFailure.MissingConcurrencyToken or
-            MedicalRecordPolicyFailure.StaleConcurrencyToken or
-            MedicalRecordPolicyFailure.AppointmentNotInProgress
-            ? ClinicalWorkflowFailure.Conflict
-            : ClinicalWorkflowFailure.AccessDenied);
+            MedicalRecordPolicyFailure.AppointmentNotInProgress => ClinicalWorkflowFailure.BusinessRule,
+            _ => ClinicalWorkflowFailure.AccessDenied
+        });
     }
 
     private static ClinicalWorkflowException Fail(ClinicalWorkflowFailure failure) => new(failure);

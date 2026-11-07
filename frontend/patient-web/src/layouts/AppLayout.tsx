@@ -26,7 +26,7 @@ export function AppLayout() {
         <Button component={RouterLink} to="/profiles" startIcon={<People />}>Profiles</Button>
         <Button component={RouterLink} to="/doctors" startIcon={<MedicalServices />}>Find a Doctor</Button>
         <Button component={RouterLink} to="/appointments" startIcon={<EventNote />}>My Appointments</Button>
-        <Button component={RouterLink} to="/medical-history" startIcon={<HistoryEdu />}>Medical History / Hồ sơ bệnh án</Button>
+        <Button component={RouterLink} to="/medical-history" startIcon={<HistoryEdu />}>Medical History</Button>
         <Button startIcon={<Logout />} onClick={() => logout.mutate()} disabled={logout.isPending}>Sign out</Button>
       </Toolbar>
     </AppBar>

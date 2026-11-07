@@ -16,5 +16,11 @@ public class PrescriptionItem
 
     public string? Instructions { get; set; }
 
+    public decimal Quantity { get; set; }
+
+    public string QuantityUnit { get; set; } = null!;
+
+    public int Position { get; set; }
+
     public Prescription Prescription { get; set; } = null!;
 }

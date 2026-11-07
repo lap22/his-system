@@ -13,6 +13,11 @@ public class AppointmentConfiguration
 
         builder.HasKey(x => x.Id);
 
+        // Clinical records must identify the appointment's actual patient and doctor.
+        builder.HasAlternateKey(x => new { x.Id, x.PatientProfileId, x.DoctorId })
+            .HasName("AK_Appointments_Id_PatientProfileId_DoctorId")
+            .IsClustered(false);
+
         builder.Property(x => x.AppointmentDate)
             .IsRequired();
 

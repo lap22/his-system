@@ -10,6 +10,8 @@ public class Prescription
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public DateTime? UpdatedAt { get; set; }
+
     public MedicalRecord MedicalRecord { get; set; } = null!;
 
     public ICollection<PrescriptionItem> Items { get; set; }
