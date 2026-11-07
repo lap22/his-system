@@ -52,7 +52,7 @@ var foreign = Fixture(); foreign.Doctors[doctorUser] = new(Guid.NewGuid(), true)
 Check(await Failure(() => Service(foreign).CreateDraftAsync(doctorActor, NewDraft(), "foreign")) == ClinicalWorkflowFailure.AccessDenied,
     "Foreign Doctor is denied");
 var wrongStatus = Fixture(AppointmentStatus.Confirmed);
-Check(await Failure(() => Service(wrongStatus).CreateDraftAsync(doctorActor, NewDraft(), "status")) == ClinicalWorkflowFailure.Conflict,
+Check(await Failure(() => Service(wrongStatus).CreateDraftAsync(doctorActor, NewDraft(), "status")) == ClinicalWorkflowFailure.BusinessRule,
     "Non-InProgress appointment is rejected");
 
 var update = new UpdateMedicalRecordDraftRequest { RowVersion = created.RowVersion,
@@ -78,10 +78,10 @@ Check(finalized.Status == MedicalRecordContractStatus.Finalized &&
     "Finalization records actor, time and audit");
 Check(await Failure(() => Service(store).FinalizeAsync(doctorActor, created.Id,
     new FinalizeMedicalRecordRequest { RowVersion = finalized.RowVersion,
-        ChiefComplaint = "Headache", Diagnosis = "Migraine" }, "repeat")) == ClinicalWorkflowFailure.Conflict,
+        ChiefComplaint = "Headache", Diagnosis = "Migraine" }, "repeat")) == ClinicalWorkflowFailure.BusinessRule,
     "Repeated finalization does not write again");
 Check(await Failure(() => Service(store).UpdateDraftAsync(doctorActor, created.Id,
-    new UpdateMedicalRecordDraftRequest { RowVersion = finalized.RowVersion }, "immutable")) == ClinicalWorkflowFailure.Conflict,
+    new UpdateMedicalRecordDraftRequest { RowVersion = finalized.RowVersion }, "immutable")) == ClinicalWorkflowFailure.BusinessRule,
     "Finalized record is immutable");
 
 var list = await Service(store).ListFinalizedForPatientProfileAsync(patientActor, profileId);

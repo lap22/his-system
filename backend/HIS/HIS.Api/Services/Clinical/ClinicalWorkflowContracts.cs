@@ -63,6 +63,25 @@ public interface IClinicalClock
     DateTime UtcNow { get; }
 }
 
+public interface IMedicalRecordApplicationService
+{
+    Task<MedicalRecordResponse?> LoadByAppointmentAsync(
+        ClinicalActor actor, Guid appointmentId,
+        CancellationToken cancellationToken = default);
+    Task<MedicalRecordResponse> CreateDraftAsync(
+        ClinicalActor actor, CreateMedicalRecordRequest request, string correlationId,
+        CancellationToken cancellationToken = default);
+    Task<MedicalRecordResponse> UpdateDraftAsync(
+        ClinicalActor actor, Guid id, UpdateMedicalRecordDraftRequest request,
+        string correlationId, CancellationToken cancellationToken = default);
+    Task<MedicalRecordResponse> FinalizeAsync(
+        ClinicalActor actor, Guid id, FinalizeMedicalRecordRequest request,
+        string correlationId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MedicalRecordResponse>> ListFinalizedForPatientProfileAsync(
+        ClinicalActor actor, Guid profileId,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class ClinicalWorkflowException : Exception
 {
     public ClinicalWorkflowException(ClinicalWorkflowFailure failure)
@@ -73,6 +92,7 @@ public sealed class ClinicalWorkflowException : Exception
     private static string MessageFor(ClinicalWorkflowFailure failure) => failure switch
     {
         ClinicalWorkflowFailure.InvalidRequest => "The clinical request is invalid.",
+        ClinicalWorkflowFailure.BusinessRule => "The clinical operation is not allowed in its current state.",
         ClinicalWorkflowFailure.AccessDenied => "The clinical resource is not available.",
         ClinicalWorkflowFailure.NotFound => "The clinical resource was not found.",
         ClinicalWorkflowFailure.Conflict => "The clinical resource changed or is not eligible for this operation.",
@@ -83,6 +103,7 @@ public sealed class ClinicalWorkflowException : Exception
 public enum ClinicalWorkflowFailure
 {
     InvalidRequest,
+    BusinessRule,
     AccessDenied,
     NotFound,
     Conflict

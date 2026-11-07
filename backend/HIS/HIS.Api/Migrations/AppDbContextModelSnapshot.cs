@@ -17,7 +17,7 @@ namespace HIS.Api.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -54,6 +54,7 @@ namespace HIS.Api.Migrations
                         .HasColumnType("time");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -67,6 +68,11 @@ namespace HIS.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasAlternateKey("Id", "PatientProfileId", "DoctorId")
+                        .HasName("AK_Appointments_Id_PatientProfileId_DoctorId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasAlternateKey("Id", "PatientProfileId", "DoctorId"), false);
+
                     b.HasIndex("PatientProfileId", "AppointmentDate");
 
                     b.HasIndex("DoctorId", "AppointmentDate", "StartTime")
@@ -74,6 +80,54 @@ namespace HIS.Api.Migrations
                         .HasFilter("[Status] <> 'Cancelled'");
 
                     b.ToTable("Appointments", (string)null);
+                });
+
+            modelBuilder.Entity("HIS.Api.Entities.ClinicalAuditEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<Guid>("MedicalRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("NewRecordVersion")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("binary(8)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<byte[]>("PreviousRecordVersion")
+                        .HasMaxLength(8)
+                        .HasColumnType("binary(8)")
+                        .IsFixedLength();
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("MedicalRecordId", "OccurredAt", "Id");
+
+                    b.ToTable("ClinicalAuditEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ClinicalAuditEvents_RequiredText", "LEN(LTRIM(RTRIM([Action]))) > 0 AND LEN(LTRIM(RTRIM([CorrelationId]))) > 0");
+                        });
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.Department", b =>
@@ -218,7 +272,6 @@ namespace HIS.Api.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ChiefComplaint")
-                        .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
@@ -226,7 +279,6 @@ namespace HIS.Api.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Diagnosis")
-                        .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
@@ -237,8 +289,25 @@ namespace HIS.Api.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
 
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<Guid?>("FinalizedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("PatientProfileId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Symptoms")
                         .HasMaxLength(2000)
@@ -258,9 +327,20 @@ namespace HIS.Api.Migrations
 
                     b.HasIndex("DoctorId");
 
+                    b.HasIndex("FinalizedByUserId");
+
                     b.HasIndex("PatientProfileId");
 
-                    b.ToTable("MedicalRecords", (string)null);
+                    b.HasIndex("AppointmentId", "PatientProfileId", "DoctorId")
+                        .IsUnique();
+
+                    b.ToTable("MedicalRecords", null, t =>
+                        {
+
+                            t.HasCheckConstraint("CK_MedicalRecords_FinalizationLifecycle", "([Status] = N'Draft' AND [FinalizedAt] IS NULL AND [FinalizedByUserId] IS NULL) OR ([Status] = N'Finalized' AND [FinalizedAt] IS NOT NULL AND [FinalizedByUserId] IS NOT NULL AND [ChiefComplaint] IS NOT NULL AND LEN(LTRIM(RTRIM([ChiefComplaint]))) > 0 AND [Diagnosis] IS NOT NULL AND LEN(LTRIM(RTRIM([Diagnosis]))) > 0)");
+
+                            t.HasCheckConstraint("CK_MedicalRecords_Status", "[Status] IN (N'Draft', N'Finalized')");
+                        });
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.Prescription", b =>
@@ -276,14 +356,18 @@ namespace HIS.Api.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Notes")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2(7)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("MedicalRecordId")
                         .IsUnique();
 
-                    b.ToTable("Prescriptions");
+                    b.ToTable("Prescriptions", (string)null);
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.PrescriptionItem", b =>
@@ -294,31 +378,56 @@ namespace HIS.Api.Migrations
 
                     b.Property<string>("Dosage")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Duration")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Frequency")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Instructions")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<string>("MedicineName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
 
                     b.Property<Guid>("PrescriptionId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("QuantityUnit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("PrescriptionId");
+                    b.HasIndex("PrescriptionId", "Position")
+                        .IsUnique();
 
-                    b.ToTable("PrescriptionItems");
+                    b.ToTable("PrescriptionItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PrescriptionItems_Position_Positive", "[Position] > 0");
+
+                            t.HasCheckConstraint("CK_PrescriptionItems_Quantity_Positive", "[Quantity] > 0");
+
+                            t.HasCheckConstraint("CK_PrescriptionItems_RequiredText", "LEN(LTRIM(RTRIM([MedicineName]))) > 0 AND LEN(LTRIM(RTRIM([Dosage]))) > 0 AND LEN(LTRIM(RTRIM([Frequency]))) > 0 AND LEN(LTRIM(RTRIM([Duration]))) > 0 AND LEN(LTRIM(RTRIM([QuantityUnit]))) > 0");
+                        });
                 });
 
             modelBuilder.Entity("HIS.Api.Entities.QueueEntry", b =>
@@ -520,6 +629,25 @@ namespace HIS.Api.Migrations
                     b.Navigation("PatientProfile");
                 });
 
+            modelBuilder.Entity("HIS.Api.Entities.ClinicalAuditEvent", b =>
+                {
+                    b.HasOne("HIS.Api.Entities.User", "ActorUser")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("HIS.Api.Entities.MedicalRecord", "MedicalRecord")
+                        .WithMany("AuditEvents")
+                        .HasForeignKey("MedicalRecordId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("ActorUser");
+
+                    b.Navigation("MedicalRecord");
+                });
+
             modelBuilder.Entity("HIS.Api.Entities.Doctor", b =>
                 {
                     b.HasOne("HIS.Api.Entities.Department", "Department")
@@ -552,17 +680,16 @@ namespace HIS.Api.Migrations
 
             modelBuilder.Entity("HIS.Api.Entities.MedicalRecord", b =>
                 {
-                    b.HasOne("HIS.Api.Entities.Appointment", "Appointment")
-                        .WithOne("MedicalRecord")
-                        .HasForeignKey("HIS.Api.Entities.MedicalRecord", "AppointmentId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
                     b.HasOne("HIS.Api.Entities.Doctor", "Doctor")
                         .WithMany("MedicalRecords")
                         .HasForeignKey("DoctorId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
+
+                    b.HasOne("HIS.Api.Entities.User", "FinalizedByUser")
+                        .WithMany()
+                        .HasForeignKey("FinalizedByUserId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("PatientProfile", "PatientProfile")
                         .WithMany("MedicalRecords")
@@ -570,9 +697,19 @@ namespace HIS.Api.Migrations
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
+                    b.HasOne("HIS.Api.Entities.Appointment", "Appointment")
+                        .WithOne("MedicalRecord")
+                        .HasForeignKey("HIS.Api.Entities.MedicalRecord", "AppointmentId", "PatientProfileId", "DoctorId")
+                        .HasPrincipalKey("HIS.Api.Entities.Appointment", "Id", "PatientProfileId", "DoctorId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired()
+                        .HasConstraintName("FK_MedicalRecords_Appointments_AppointmentId_PatientProfileId_DoctorId");
+
                     b.Navigation("Appointment");
 
                     b.Navigation("Doctor");
+
+                    b.Navigation("FinalizedByUser");
 
                     b.Navigation("PatientProfile");
                 });
@@ -582,7 +719,7 @@ namespace HIS.Api.Migrations
                     b.HasOne("HIS.Api.Entities.MedicalRecord", "MedicalRecord")
                         .WithOne("Prescription")
                         .HasForeignKey("HIS.Api.Entities.Prescription", "MedicalRecordId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("MedicalRecord");
@@ -593,7 +730,7 @@ namespace HIS.Api.Migrations
                     b.HasOne("HIS.Api.Entities.Prescription", "Prescription")
                         .WithMany("Items")
                         .HasForeignKey("PrescriptionId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
 
                     b.Navigation("Prescription");
@@ -655,6 +792,8 @@ namespace HIS.Api.Migrations
 
             modelBuilder.Entity("HIS.Api.Entities.MedicalRecord", b =>
                 {
+                    b.Navigation("AuditEvents");
+
                     b.Navigation("Prescription");
                 });
 
