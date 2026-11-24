@@ -47,17 +47,21 @@ test('Doctor account changes and Patient account/profile changes isolate rendere
   assert.match(doctorPage, /reset\(emptyClinicalDraft\).*user\?\.userId/s)
   assert.match(patientPage, /auth\.user\?\.userId.*effectiveProfileId/)
 })
-test('Patient runtime presents no fabricated MedicalRecord entries', () => {
-  assert.match(patientPage, /Electronic medical records are not yet available/)
-  assert.doesNotMatch(patientPage, /<MedicalRecordDetail|records\.map/)
+test('Patient runtime presents only verified finalized MedicalRecord entries', () => {
+  assert.match(patientPage, /Electronic medical records are currently disabled/)
+  assert.match(patientPage, /records\.data\?\.map/)
+  assert.match(patientContracts, /z\.literal\('Finalized'\)/)
 })
 test('clinical content enters no browser persistence, logs or URL parameters', () => {
   const runtime = doctorPage + patientPage
   assert.doesNotMatch(runtime, /localStorage|sessionStorage|console\.|URLSearchParams/)
 })
-test('neither portal has an active clinical HTTP adapter', () => {
-  const runtime = doctorPage + patientPage
-  assert.doesNotMatch(runtime, /apiClient|axios|medicalRecordsApi|\bfetch\(/)
+test('both portals keep clinical HTTP integration behind an explicit gate', () => {
+  const staffGate = read('frontend/staff-web/src/services/clinicalFeature.ts')
+  const patientGate = read('frontend/patient-web/src/services/clinicalFeature.ts')
+  assert.match(staffGate, /VITE_CLINICAL_API_ENABLED === 'true'/)
+  assert.match(patientGate, /VITE_CLINICAL_API_ENABLED === 'true'/)
+  assert.match(doctorPage, /clinicalApiEnabled/); assert.match(patientPage, /clinicalApiEnabled/)
 })
 test('clinical finalization has no Queue completion call or side effect', () => {
   assert.doesNotMatch(service, /Queue|CompleteAsync|QueueEntry/)

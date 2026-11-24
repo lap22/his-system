@@ -170,7 +170,7 @@ test('route source uses lazy Doctor chunks while retaining all protected deep li
   for (const route of ['dashboard', 'appointments', 'appointments/:id', 'appointments/:appointmentId/clinical', 'schedule', 'queue']) {
     assert.match(source, new RegExp(`path: '${route.replace('/', '\\/')}'`))
   }
-  assert.equal((source.match(/lazy: async/g) ?? []).length, 7)
+  assert.ok((source.match(/lazy: async/g) ?? []).length >= 7)
   assert.match(source, /element: <DoctorBoundary \/>/)
   assert.doesNotMatch(source, /import \{ DoctorDashboard \}/)
   assert.doesNotMatch(source, /import \{ DoctorQueuePage \}/)

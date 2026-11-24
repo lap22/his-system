@@ -272,7 +272,12 @@ test('confirmation hook updates exact detail and invalidates list/dashboard cach
 
 test('dashboard/list loading, empty and error states never fabricate metrics', () => {
   let query = ok([])
-  const load = loader({ '../hooks/useDoctorAppointments': { useDoctorAppointments: () => query }, '../hooks/useCurrentDoctor': { useCurrentDoctor: () => ({ data: { fullName: 'Doctor Test' } }) } })
+  const load = loader({
+    '../hooks/useDoctorAppointments': { useDoctorAppointments: () => query },
+    '../hooks/useCurrentDoctor': { useCurrentDoctor: () => ({ data: { fullName: 'Doctor Test' } }) },
+    '../hooks/useDoctorQueue': { useDoctorQueue: () => ok([]) },
+    '../hooks/useQueueRealtime': { useQueueRealtime: () => ({ status: 'disconnected' }) },
+  })
   const Dashboard = load('src/pages/DoctorDashboard.tsx').DoctorDashboard
   assert.match(render(Dashboard), /No appointments today/)
   query = { ...ok([]), isSuccess: false, isPending: true }

@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
-    "test": "node tests/doctorPortal.test.cjs && node tests/doctorAppointments.test.cjs && node tests/doctorQueue.test.cjs && node tests/doctorIntegration.test.cjs && node tests/clinicalWorkspace.test.cjs && node tests/clinicalIntegration.test.cjs",
+    "test": "node tests/doctorPortal.test.cjs && node tests/doctorAppointments.test.cjs && node tests/doctorQueue.test.cjs && node tests/doctorIntegration.test.cjs && node tests/clinicalWorkspace.test.cjs && node tests/clinicalIntegration.test.cjs && node tests/clinicalApi.test.cjs && node tests/adminDepartments.test.cjs && node tests/adminDoctors.test.cjs && node tests/adminSchedules.test.cjs",
     "test:clinical": "node tests/clinicalWorkspace.test.cjs",
     "test:clinical-integration": "node tests/clinicalIntegration.test.cjs",
     "test:integration": "node tests/doctorIntegration.test.cjs",

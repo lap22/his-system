@@ -1,7 +1,11 @@
 ﻿using HIS.Api.Data;
 using HIS.Api.DTOs.DoctorSchedules;
 using HIS.Api.Entities;
+using HIS.Api.Enums;
+using HIS.Api.Exceptions;
+using HIS.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace HIS.Api.Services;
 
@@ -83,6 +87,11 @@ public class DoctorScheduleService : IDoctorScheduleService
 
         ValidateDoctorAvailability(doctor);
 
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted);
+        await AppointmentScheduleLock.AcquireExclusiveAsync(
+            _dbContext.Database, request.DoctorId);
+
         var hasOverlap = await HasOverlapAsync(
             request.DoctorId,
             request.DayOfWeek,
@@ -109,6 +118,7 @@ public class DoctorScheduleService : IDoctorScheduleService
         _dbContext.DoctorSchedules.Add(schedule);
 
         await _dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         schedule.Doctor = doctor;
 
@@ -124,6 +134,22 @@ public class DoctorScheduleService : IDoctorScheduleService
             request.EndTime,
             request.SlotDurationMinutes,
             request.MaxPatients);
+
+        var doctorId = await _dbContext.DoctorSchedules
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => (Guid?)x.DoctorId)
+            .FirstOrDefaultAsync();
+
+        if (!doctorId.HasValue)
+        {
+            return null;
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted);
+        await AppointmentScheduleLock.AcquireExclusiveAsync(
+            _dbContext.Database, doctorId.Value);
 
         var schedule = await _dbContext.DoctorSchedules
             .Include(x => x.Doctor)
@@ -152,6 +178,17 @@ public class DoctorScheduleService : IDoctorScheduleService
                 "The schedule overlaps with an existing schedule.");
         }
 
+        var proposed = new ScheduleCoverage(
+            schedule.Id,
+            schedule.DoctorId,
+            request.DayOfWeek,
+            request.StartTime,
+            request.EndTime,
+            request.SlotDurationMinutes,
+            request.MaxPatients,
+            schedule.IsActive);
+        await EnsureFutureAppointmentsRemainCoveredAsync(schedule, proposed);
+
         schedule.DayOfWeek = request.DayOfWeek;
         schedule.StartTime = request.StartTime;
         schedule.EndTime = request.EndTime;
@@ -160,6 +197,7 @@ public class DoctorScheduleService : IDoctorScheduleService
         schedule.MaxPatients = request.MaxPatients;
 
         await _dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return MapToResponse(schedule);
     }
@@ -168,6 +206,22 @@ public class DoctorScheduleService : IDoctorScheduleService
         Guid id,
         UpdateDoctorScheduleStatusRequest request)
     {
+        var doctorId = await _dbContext.DoctorSchedules
+            .AsNoTracking()
+            .Where(x => x.Id == id)
+            .Select(x => (Guid?)x.DoctorId)
+            .FirstOrDefaultAsync();
+
+        if (!doctorId.HasValue)
+        {
+            return null;
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted);
+        await AppointmentScheduleLock.AcquireExclusiveAsync(
+            _dbContext.Database, doctorId.Value);
+
         var schedule = await _dbContext.DoctorSchedules
             .Include(x => x.Doctor)
                 .ThenInclude(x => x.User)
@@ -199,12 +253,77 @@ public class DoctorScheduleService : IDoctorScheduleService
                     "The schedule overlaps with an existing active schedule.");
             }
         }
+        else if (schedule.IsActive)
+        {
+            var proposed = ScheduleCoverage.From(schedule) with
+            {
+                IsActive = false
+            };
+            await EnsureFutureAppointmentsRemainCoveredAsync(schedule, proposed);
+        }
 
         schedule.IsActive = request.IsActive;
 
         await _dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return MapToResponse(schedule);
+    }
+
+    private async Task EnsureFutureAppointmentsRemainCoveredAsync(
+        DoctorSchedule currentSchedule,
+        ScheduleCoverage proposedSchedule)
+    {
+        if (!currentSchedule.IsActive)
+            return;
+
+        var localNow = HospitalClock.LocalNow;
+        var today = DateOnly.FromDateTime(localNow);
+        var now = TimeOnly.FromDateTime(localNow);
+
+        var otherSchedules = await _dbContext.DoctorSchedules
+            .AsNoTracking()
+            .Where(x =>
+                x.DoctorId == currentSchedule.DoctorId &&
+                x.Id != currentSchedule.Id &&
+                x.IsActive)
+            .Select(x => new ScheduleCoverage(
+                x.Id,
+                x.DoctorId,
+                x.DayOfWeek,
+                x.StartTime,
+                x.EndTime,
+                x.SlotDurationMinutes,
+                x.MaxPatients,
+                x.IsActive))
+            .ToListAsync();
+
+        var appointments = await _dbContext.Appointments
+            .AsNoTracking()
+            .Where(x =>
+                x.DoctorId == currentSchedule.DoctorId &&
+                (x.AppointmentDate > today ||
+                 (x.AppointmentDate == today && x.StartTime > now)) &&
+                x.Status != AppointmentStatus.Completed &&
+                x.Status != AppointmentStatus.Cancelled &&
+                x.Status != AppointmentStatus.NoShow)
+            .Select(x => new AppointmentCoverage(
+                x.DoctorId,
+                x.AppointmentDate,
+                x.StartTime,
+                x.EndTime,
+                x.Status))
+            .ToListAsync();
+
+        if (!ScheduleAppointmentIntegrity.PreservesAffectedAppointments(
+                ScheduleCoverage.From(currentSchedule),
+                proposedSchedule,
+                otherSchedules,
+                appointments,
+                localNow))
+        {
+            throw new ScheduleAppointmentConflictException();
+        }
     }
 
     private static void ValidateSchedule(

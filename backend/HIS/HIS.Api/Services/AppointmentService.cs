@@ -43,6 +43,8 @@ public class AppointmentService : IAppointmentService
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.ReadCommitted);
+        await AppointmentScheduleLock.AcquireSharedAsync(
+            _dbContext.Database, doctorId);
         await AcquireBookingLockAsync(doctorId, date, "Shared");
         var localNow = HospitalClock.LocalNow;
         var today = DateOnly.FromDateTime(localNow);
@@ -219,6 +221,8 @@ public class AppointmentService : IAppointmentService
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(
             IsolationLevel.ReadCommitted);
+        await AppointmentScheduleLock.AcquireSharedAsync(
+            _dbContext.Database, request.DoctorId);
         await AcquireBookingLockAsync(request.DoctorId, request.AppointmentDate, "Exclusive");
         var localNow = HospitalClock.LocalNow;
         var today = DateOnly.FromDateTime(localNow);
