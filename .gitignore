@@ -20,6 +20,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Local logs
+*.log
+
 # Playwright artifacts and private authentication (including sessionStorage)
 **/.auth/
 **/playwright-report/

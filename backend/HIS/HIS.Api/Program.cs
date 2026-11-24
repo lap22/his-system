@@ -256,7 +256,6 @@ app.UseAuthorization();
 // ============================================================
 // 10. Map Controllers
 // ============================================================
-app.UseStaticFiles();
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/queue");
 
