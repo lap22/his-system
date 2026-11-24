@@ -35,10 +35,14 @@ const rules = loadSource('src/utils/medicalHistory.ts')
 const profile = (id, fullName, isDefault = false) => ({ id, fullName, isDefault, relationship: 'Self' })
 const success = (data) => ({ data, isPending: false, isError: false, isFetching: false, refetch() {} })
 let profileQuery = success([])
+let historyQuery = success([])
 let authUserId = '11111111-1111-4111-8111-111111111111'
 const { MedicalHistoryPage } = loadSource('src/pages/MedicalHistoryPage.tsx', {
   '../hooks/usePatientProfiles': { usePatientProfiles: () => profileQuery },
+  '../hooks/useMedicalHistory': { useMedicalHistory: () => historyQuery },
   '../hooks/useAuth': { useAuth: () => ({ user: { userId: authUserId, role: 'Patient' } }) },
+  '../services/clinicalFeature': { clinicalApiEnabled: false },
+  '../services/medicalRecordsApi': { medicalHistoryError: () => 'Medical history failed' },
   '../services/patientProfilesApi': { profileErrorMessage: () => 'Profile request failed' },
 })
 function render(query = success([])) {
@@ -64,8 +68,8 @@ test('Doctor and Admin roles remain denied by the Patient portal role allowlist'
   assert.match(portalSource, /roles: \['Patient'\]/)
   assert.doesNotMatch(portalSource, /roles: \[[^\]]*(Doctor|Admin)/)
 })
-test('navigation exposes the bilingual Medical History entry', () => {
-  assert.match(layoutSource, /to="\/medical-history"/); assert.match(layoutSource, /Medical History \/ Hồ sơ bệnh án/)
+test('navigation exposes the Medical History entry', () => {
+  assert.match(layoutSource, /to="\/medical-history"/); assert.match(layoutSource, />Medical History<\/Button>/)
 })
 test('default profile selection uses real profile IDs', () => {
   const profiles = [profile('family-id', 'Family'), profile('default-id', 'Default', true)]
@@ -84,12 +88,12 @@ test('future cache keys isolate account and PatientProfile identities', () => {
   assert.notDeepEqual(rules.medicalHistoryKeys.profile('account', 'profile-a'), rules.medicalHistoryKeys.profile('account', 'profile-b'))
 })
 test('empty profile and medical-history states are explicit', () => {
-  const html = render(success([])); assert.match(html, /Add a Patient Profile/); assert.match(html, /No electronic medical records are available/)
+  const html = render(success([])); assert.match(html, /Add a Patient Profile/); assert.match(html, /No finalized electronic medical records are available/)
 })
-test('runtime page fabricates no medical records', () => {
+test('disabled runtime fabricates no medical records and reports the gate', () => {
   const html = render(success([profile('owned', 'Nguyễn An', true)]))
-  assert.match(html, /Electronic medical records are not yet available/)
-  assert.doesNotMatch(pageSource, /<MedicalRecordDetail|records\.map/)
+  assert.match(html, /Electronic medical records are currently disabled/)
+  assert.match(pageSource, /records\.data\?\.map/)
 })
 test('Appointment History is clearly separate from clinical history', () => {
   const html = render(success([])); assert.match(html, /Open Appointment History/); assert.match(html, /separate from finalized clinical records/)
@@ -113,8 +117,9 @@ test('record list and detail use responsive minmax grids', () => {
 test('profile selection and navigation retain native keyboard-accessible controls', () => {
   assert.match(pageSource, /<Select/); assert.match(pageSource, /<Button component=\{Link\}/); assert.match(pageSource, /aria-live="polite"/)
 })
-test('Medical History source contains no clinical API request or query hook', () => {
-  assert.doesNotMatch(pageSource, /apiClient|axios|\bfetch\(|useQuery|medicalRecordsApi/)
+test('Medical History uses the gated profile-scoped query hook without direct requests', () => {
+  assert.match(pageSource, /useMedicalHistory\(effectiveProfileId\)/)
+  assert.doesNotMatch(pageSource, /apiClient|axios|\bfetch\(/)
 })
 test('clinical content is never persisted in browser storage or logged', () => {
   const combined = pageSource + readFileSync(path.resolve(__dirname, '../src/components/medicalHistory/MedicalRecordDetail.tsx'), 'utf8')

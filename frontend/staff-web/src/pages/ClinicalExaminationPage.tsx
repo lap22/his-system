@@ -8,8 +8,11 @@ import {
   DialogContentText, DialogTitle, Divider, Skeleton, Stack, TextField, Typography,
 } from '@mui/material'
 import { useDoctorAppointmentDetail } from '../hooks/useDoctorAppointments'
+import { useAppointmentMedicalRecord, useFinalizeMedicalRecord, useSaveMedicalRecord } from '../hooks/useMedicalRecord'
 import { useAuth } from '../hooks/useAuth'
+import { clinicalApiEnabled } from '../services/clinicalFeature'
 import { appointmentReadError } from '../services/doctorAppointmentsApi'
+import { clinicalRequestError } from '../services/medicalRecordsApi'
 import {
   clinicalDraftSchema, clinicalFieldLimits, clinicalFinalizationReviewSchema,
   emptyClinicalDraft,
@@ -30,6 +33,15 @@ function SummaryValue({ label, value }: { label: string; value: string }) {
     <Typography component="dd" sx={{ m: 0, overflowWrap: 'anywhere' }}>{value}</Typography></Box>
 }
 
+function createSubmissionGate() {
+  let locked = false
+  return { run: async (action: () => Promise<void>) => {
+    if (locked) return
+    locked = true
+    try { await action() } finally { locked = false }
+  } }
+}
+
 export function ClinicalExaminationPage() {
   const { appointmentId = '' } = useParams()
   if (!z.uuid().safeParse(appointmentId).success) {
@@ -40,10 +52,12 @@ export function ClinicalExaminationPage() {
 
 function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
   const query = useDoctorAppointmentDetail(appointmentId)
+  const recordQuery = useAppointmentMedicalRecord(appointmentId)
   const { user } = useAuth()
   const [review, setReview] = useState<ClinicalDraft | null>(null)
   const reviewTrigger = useRef<HTMLButtonElement | null>(null)
   const heading = useRef<HTMLHeadingElement | null>(null)
+  const [submissionGate] = useState(createSubmissionGate)
   const form = useForm<ClinicalDraft>({
     resolver: zodResolver(clinicalDraftSchema), defaultValues: emptyClinicalDraft, mode: 'onChange',
   })
@@ -51,10 +65,22 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
   const values = useWatch({ control: form.control })
   const dirty = form.formState.isDirty
   const blocker = useBlocker(dirty)
+  const save = useSaveMedicalRecord(appointmentId, recordQuery.data)
+  const finalize = useFinalizeMedicalRecord(appointmentId, recordQuery.data)
+  const mutationPending = save.isPending || finalize.isPending
 
   // Account changes clear all clinician-entered content. Appointment data is
   // account-scoped separately by the existing TanStack Query keys.
   useEffect(() => { reset(emptyClinicalDraft) }, [user?.userId, reset])
+  useEffect(() => {
+    const record = recordQuery.data
+    if (!record || form.formState.isDirty) return
+    reset({
+      chiefComplaint: record.chiefComplaint ?? '', symptoms: record.symptoms ?? '',
+      diagnosis: record.diagnosis ?? '', treatment: record.treatment ?? '',
+      doctorNotes: record.doctorNotes ?? '',
+    })
+  }, [recordQuery.data, form.formState.isDirty, reset])
   useBeforeUnload(event => {
     if (dirty) { event.preventDefault(); event.returnValue = '' }
   })
@@ -78,6 +104,21 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
     const target = reviewTrigger.current
     ;(target?.isConnected && !target.disabled ? target : heading.current)?.focus()
   }
+  const savedValues = (record: NonNullable<typeof recordQuery.data>) => ({
+    chiefComplaint: record.chiefComplaint ?? '', symptoms: record.symptoms ?? '',
+    diagnosis: record.diagnosis ?? '', treatment: record.treatment ?? '',
+    doctorNotes: record.doctorNotes ?? '',
+  })
+  const saveDraft = form.handleSubmit(async draft => {
+    await submissionGate.run(async () => reset(savedValues(await save.mutateAsync(draft))))
+  })
+  const finalizeRecord = async () => {
+    if (!review || mutationPending) return
+    await submissionGate.run(async () => {
+      reset(savedValues(await finalize.mutateAsync(review)))
+      setReview(null)
+    })
+  }
 
   if (query.isPending) return <Box role="status" aria-label="Loading clinical appointment" sx={{ display: 'grid', gap: 2 }}>
     <Skeleton height={64} /><Skeleton height={180} /><Skeleton height={360} />
@@ -86,6 +127,9 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
   if (query.isError) return <Alert severity="error" action={<Button disabled={query.isFetching} onClick={() => { void query.refetch() }}>Retry</Button>}>
     {appointmentReadError(query.error)}
   </Alert>
+  if (clinicalApiEnabled && recordQuery.isPending) return <Box role="status" aria-label="Loading clinical record" sx={{ display: 'grid', gap: 2 }}>
+    <Skeleton height={64} /><Skeleton height={360} /><span>Loading clinical record…</span>
+  </Box>
 
   const appointment = query.data
   if (appointment.status !== 'InProgress') return <Box sx={{ display: 'grid', gap: 2 }}>
@@ -101,12 +145,22 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
         <Typography color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>Appointment reference: {appointment.id}</Typography>
       </Box>
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <Chip label="Frontend preview · Not persisted" color="warning" />
+        <Chip label={clinicalApiEnabled ? 'Clinical API enabled' : 'Frontend preview · Not persisted'} color={clinicalApiEnabled ? 'success' : 'warning'} />
         <Button component={Link} to={`/doctor/appointments/${appointment.id}`}>Back to appointment</Button>
       </Stack>
     </Box>
 
-    <Alert severity="warning">Clinical persistence is not available. Content entered here stays only in this page session and will be lost when you leave.</Alert>
+    {!clinicalApiEnabled ? <Alert severity="warning">Clinical persistence is disabled. Content entered here stays only in this page session and will be lost when you leave.</Alert> : null}
+    {clinicalApiEnabled && recordQuery.isError ? <Alert severity="error" action={<Button disabled={recordQuery.isFetching} onClick={() => { void recordQuery.refetch() }}>Reload record</Button>}>
+      {clinicalRequestError(recordQuery.error).message}
+    </Alert> : null}
+    {save.isError || finalize.isError ? <Alert severity={clinicalRequestError(save.error ?? finalize.error).conflict ? 'warning' : 'error'}
+      action={clinicalRequestError(save.error ?? finalize.error).conflict
+        ? <Button onClick={() => { save.reset(); finalize.reset(); void recordQuery.refetch() }}>Reload latest record</Button> : undefined}>
+      {clinicalRequestError(save.error ?? finalize.error).message}
+    </Alert> : null}
+    {save.isSuccess ? <Alert severity="success">Draft saved successfully.</Alert> : null}
+    {finalize.isSuccess ? <Alert severity="success">Medical record finalized successfully.</Alert> : null}
 
     <Card><CardContent sx={{ display: 'grid', gap: 2 }}>
       <Typography component="h2" variant="h5">Patient and appointment summary</Typography>
@@ -123,7 +177,7 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
       <Typography variant="body2" color="text.secondary">Reported during appointment booking. Read-only.</Typography>
     </CardContent></Card>
 
-    <Card component="form" noValidate onSubmit={event => event.preventDefault()}><CardContent sx={{ display: 'grid', gap: 2 }}>
+    <Card component="form" noValidate onSubmit={event => { event.preventDefault(); if (clinicalApiEnabled) void saveDraft() }}><CardContent sx={{ display: 'grid', gap: 2 }}>
       <Typography component="h2" variant="h5">Clinical record editor</Typography>
       <Typography color="text.secondary">Required markers indicate future finalization requirements. Incomplete in-memory drafting remains allowed.</Typography>
       {fields.map(([name, label, maximum, finalizationRequired]) => {
@@ -131,13 +185,18 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
         const error = form.formState.errors[name]?.message
         return <TextField key={name} label={`${label}${finalizationRequired ? ' (required to finalize)' : ''}`} multiline minRows={name === 'doctorNotes' ? 4 : 3}
           {...form.register(name)} error={!!error} helperText={error || `${value.length}/${maximum} characters`}
+          disabled={mutationPending || recordQuery.data?.status === 'Finalized'}
           slotProps={{ htmlInput: { maxLength: maximum, 'aria-describedby': 'clinical-privacy' } }} />
       })}
-      <Typography id="clinical-privacy" variant="caption" color="text.secondary">Clinical text is held in memory only. It is not saved or sent to an API.</Typography>
+      <Typography id="clinical-privacy" variant="caption" color="text.secondary">{clinicalApiEnabled
+        ? 'Clinical text is sent only to the authenticated hospital API and is never stored in browser storage.'
+        : 'Clinical text is held in memory only. It is not saved or sent to an API.'}</Typography>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <Button ref={reviewTrigger} variant="contained" onClick={() => { void openReview() }}>Review entered information</Button>
-        <Button disabled variant="outlined">Save Draft unavailable</Button>
-        <Button disabled color="success" variant="contained">Finalize unavailable</Button>
+        <Button ref={reviewTrigger} variant="contained" disabled={mutationPending || recordQuery.data?.status === 'Finalized'} onClick={() => { void openReview() }}>Review and finalize</Button>
+        <Button type="submit" disabled={!clinicalApiEnabled || mutationPending || recordQuery.isError || recordQuery.data?.status === 'Finalized'} variant="outlined">
+          {save.isPending ? 'Saving…' : 'Save Draft'}
+        </Button>
+        {!clinicalApiEnabled ? <Button disabled color="success" variant="contained">Finalize unavailable</Button> : null}
       </Box>
     </CardContent></Card>
 
@@ -145,13 +204,17 @@ function ClinicalWorkspace({ appointmentId }: { appointmentId: string }) {
       disableRestoreFocus slotProps={{ transition: { onExited: restoreReviewFocus } }}>
       <DialogTitle id="clinical-review-title">Review clinical information</DialogTitle>
       <DialogContent sx={{ display: 'grid', gap: 2 }}>
-        <Alert severity="warning">This content has not been saved. Review does not finalize the record or complete the queue.</Alert>
+        <Alert severity="warning">Finalization is permanent. Confirm that the clinical information is complete and accurate.</Alert>
         <Box component="dl" sx={{ display: 'grid', gap: 2, m: 0 }}>
           {review && fields.map(([name, label]) => <SummaryValue key={name} label={label} value={review[name].trim() || 'Not provided'} />)}
         </Box>
-        <DialogContentText>Return to editing to make changes. Persistence will be introduced only after the backend contract is approved.</DialogContentText>
+        <DialogContentText>Return to editing to make changes, or finalize this record. Finalization is not automatically retried.</DialogContentText>
       </DialogContent>
-      <DialogActions><Button autoFocus onClick={() => setReview(null)}>Return to editing</Button></DialogActions>
+      <DialogActions>
+        <Button autoFocus disabled={mutationPending} onClick={() => setReview(null)}>Return to editing</Button>
+        <Button color="success" variant="contained" disabled={!clinicalApiEnabled || !recordQuery.data || mutationPending}
+          onClick={() => { void finalizeRecord() }}>{finalize.isPending ? 'Finalizing…' : 'Finalize record'}</Button>
+      </DialogActions>
     </Dialog>
 
     <Dialog open={blocker.state === 'blocked'} aria-labelledby="clinical-unsaved-title">

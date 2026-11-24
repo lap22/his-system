@@ -44,6 +44,14 @@ public class ExceptionHandlingMiddleware
                 ex.Message
             );
         }
+        catch (ScheduleAppointmentConflictException ex)
+        {
+            await WriteErrorResponseAsync(
+                context,
+                HttpStatusCode.Conflict,
+                ex.Message
+            );
+        }
         catch (UnauthorizedAccessException ex)
         {
             await WriteErrorResponseAsync(

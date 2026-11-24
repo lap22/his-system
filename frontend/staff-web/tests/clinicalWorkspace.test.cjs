@@ -50,7 +50,12 @@ test('clinical entry action is limited to InProgress', () => assert.match(detail
 test('non-InProgress appointments are rejected by the workspace', () => assert.match(page, /appointment\.status !== 'InProgress'/))
 test('invalid route identifiers are rejected before workspace/query creation', () => assert.ok(page.indexOf('safeParse(appointmentId)') < page.indexOf('<ClinicalWorkspace')))
 test('draft content is memory-only with no storage or API client', () => { assert.doesNotMatch(page, /localStorage|sessionStorage|apiClient/); assert.match(page, /useForm<ClinicalDraft>/) })
-test('save and finalize controls are explicitly disabled', () => { assert.match(page, /<Button disabled variant="outlined">Save Draft unavailable/); assert.match(page, /<Button disabled color="success"/) })
+test('save and finalize controls are gated and duplicate submissions are disabled', () => {
+  assert.match(page, /disabled=\{!clinicalApiEnabled \|\| mutationPending/)
+  assert.match(page, /Finalize unavailable/)
+  assert.match(page, /finalize\.isPending/)
+  assert.match(page, /submissionGate\.run/)
+})
 test('unsaved content guards cover router and page unload', () => { assert.match(page, /useBlocker\(dirty\)/); assert.match(page, /useBeforeUnload/) })
 test('account changes clear clinician-entered content', () => assert.match(page, /reset\(emptyClinicalDraft\).*user\?\.userId/s))
 test('proposed persistence contracts remain isolated and carry concurrency metadata', () => {

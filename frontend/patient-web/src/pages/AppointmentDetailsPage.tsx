@@ -1,5 +1,5 @@
 import ArrowBack from '@mui/icons-material/ArrowBack'
-import { Alert, Box, Button, Card, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography, useMediaQuery } from '@mui/material'
+import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography, useMediaQuery } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useRef, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
@@ -8,10 +8,16 @@ import { AppointmentStatusChip } from '../components/appointments/AppointmentSta
 import { DoctorDetails } from '../components/doctors/DoctorDetails'
 import { useAppointment } from '../hooks/useAppointments'
 import { useCancelAppointment } from '../hooks/useCancelAppointment'
+import { useCheckInAppointment, usePatientQueue } from '../hooks/usePatientQueue'
 import { appointmentReadError } from '../services/appointmentsApi'
 import type { Appointment } from '../types/appointment'
 import { formatAppointmentDate, formatAppointmentTime, formatAppointmentTimestamp } from '../utils/appointmentFormatting'
 import { appointmentStatusLabels, canCancelAppointment } from '../utils/myAppointments'
+import { hospitalToday } from '../utils/appointmentAvailability'
+
+const queueStatusLabels = {
+  Waiting: 'Waiting', Called: 'Called', InService: 'In service', Completed: 'Completed', Skipped: 'Skipped',
+} as const
 
 function Information({ label, value }: { label: string; value: string }) {
   return <Box><Typography variant="caption" color="text.secondary">{label}</Typography>
@@ -21,6 +27,7 @@ function Information({ label, value }: { label: string; value: string }) {
 function AppointmentDetails({ id }: { id: string }) {
   const query = useAppointment(id)
   const cancellation = useCancelAppointment(id)
+  const queue = usePatientQueue()
   const fullScreen = useMediaQuery(useTheme().breakpoints.down('sm'))
   const [reviewed, setReviewed] = useState<Appointment | null>(null)
   const [reason, setReason] = useState('')
@@ -33,10 +40,14 @@ function AppointmentDetails({ id }: { id: string }) {
     target?.focus()
   }
   const appointment = query.data
+  const checkIn = useCheckInAppointment(appointment)
+  const queueEntry = checkIn.entry ?? queue.data?.find(entry => entry.appointmentId === id)
   const busy = cancellation.pending || cancellation.checking
   const canCancel = query.isSuccess && !query.isFetching && appointment && canCancelAppointment(appointment.status)
     && cancellation.protection === 'clear' && !busy
   const closeConfirmation = () => { if (!busy) setReviewed(null) }
+  const canCheckIn = appointment?.status === 'Confirmed' && appointment.appointmentDate === hospitalToday()
+    && !queueEntry && !queue.isFetching && !checkIn.pending && !checkIn.unresolved
   return <Box sx={{ display: 'grid', gap: 3 }}>
     <Button component={RouterLink} to="/appointments" startIcon={<ArrowBack />} sx={{ justifySelf: 'start' }}>My Appointments</Button>
     <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -54,6 +65,21 @@ function AppointmentDetails({ id }: { id: string }) {
       ? 'A previous cancellation needs verification. Another cancellation will not be sent. Check the status or contact the hospital with the appointment reference.'
       : 'Browser cancellation protection could not be verified. Cancellation is disabled. Enable session storage or contact the hospital with the appointment reference.'}</Alert> : null}
     {cancellation.verificationMessage ? <Alert severity={appointment?.status === 'Cancelled' ? 'success' : 'warning'} role="status">{cancellation.verificationMessage}</Alert> : null}
+    {queue.isError ? <Alert severity="warning" action={<Button disabled={queue.isFetching} onClick={() => { void queue.refetch() }}>Retry queue status</Button>}>
+      Queue status could not be loaded. Do not check in until the current status is verified.</Alert> : null}
+    {checkIn.failure ? <Alert severity={checkIn.unresolved ? 'warning' : 'error'}>{checkIn.failure.message}</Alert> : null}
+    {queueEntry ? <Card variant="outlined"><CardContent sx={{ display: 'grid', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        <Typography component="h2" variant="h5">Queue status</Typography>
+        <Chip color={queueEntry.status === 'Completed' ? 'success' : queueEntry.status === 'Called' ? 'warning' : 'info'}
+          label={queueStatusLabels[queueEntry.status]} />
+      </Box>
+      <Information label="Queue number" value={String(queueEntry.queueNumber)} />
+      <Information label="Checked in at (hospital time)" value={formatAppointmentTimestamp(queueEntry.checkedInAt)} />
+      {queueEntry.calledAt ? <Information label="Called at" value={formatAppointmentTimestamp(queueEntry.calledAt)} /> : null}
+      {queueEntry.startedAt ? <Information label="Examination started" value={formatAppointmentTimestamp(queueEntry.startedAt)} /> : null}
+      {queueEntry.completedAt ? <Information label="Completed" value={formatAppointmentTimestamp(queueEntry.completedAt)} /> : null}
+    </CardContent></Card> : null}
     {appointment ? <Card variant="outlined"><CardContent sx={{ display: 'grid', gap: 2.5 }}>
       <Box><AppointmentStatusChip status={appointment.status} /></Box>
       <Box sx={{ display: 'grid', gap: 2.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
@@ -72,10 +98,14 @@ function AppointmentDetails({ id }: { id: string }) {
       <Information label="Patient profile reference" value={appointment.patientProfileId} />
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
         <Button onClick={() => setDoctorId(appointment.doctorId)}>View doctor information</Button>
+        {appointment.status === 'Confirmed' && appointment.appointmentDate === hospitalToday() ? <Button variant="contained"
+          disabled={!canCheckIn} onClick={() => { void checkIn.submit() }}>{checkIn.pending ? 'Checking in…' : 'Check in'}</Button> : null}
         {canCancelAppointment(appointment.status) ? <Button color="error" variant="outlined" disabled={!canCancel}
           onClick={(event) => { cancellationTrigger.current = event.currentTarget; setReason(''); setReviewed(appointment) }}>Cancel appointment</Button> : null}
       </Box>
       <Typography color="text.secondary" variant="body2">Only Pending and Confirmed appointments can be cancelled. Checked in, In progress, Completed, Cancelled and No show appointments cannot be cancelled. The hospital checks the current status again when you confirm.</Typography>
+      {appointment.status === 'Confirmed' && appointment.appointmentDate !== hospitalToday()
+        ? <Typography color="text.secondary" variant="body2">Check-in becomes available on the appointment date in Asia/Ho_Chi_Minh.</Typography> : null}
     </CardContent></Card> : null}
     <Dialog open={Boolean(reviewed)} onClose={closeConfirmation} fullWidth maxWidth="sm" fullScreen={fullScreen} aria-labelledby="cancel-appointment-title"
       disableRestoreFocus slotProps={{ transition: { onExited: restoreCancellationFocus } }}>

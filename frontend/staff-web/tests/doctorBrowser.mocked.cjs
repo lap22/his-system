@@ -11,11 +11,17 @@ const appointmentId = '33333333-3333-4333-8333-333333333333'
 const clinicalAppointmentId = '66666666-6666-4666-8666-666666666666'
 const profileId = '44444444-4444-4444-8444-444444444444'
 const departmentId = '55555555-5555-4555-8555-555555555555'
+const department = { id: departmentId, name: 'Internal Medicine', description: 'Adult patient care', isActive: true,
+  createdAt: '2026-11-09T01:00:00Z', updatedAt: null }
+const schedule = { id: '77777777-7777-4777-8777-777777777777', doctorId, doctorName: 'Doctor', dayOfWeek: 'Monday',
+  startTime: '08:00:00', endTime: '12:00:00', slotDurationMinutes: 30, maxPatients: 8, isActive: true }
 
 const session = role => ({ accessToken: 'synthetic-browser-token', refreshToken: 'synthetic-browser-refresh',
   accessTokenExpiresAt: '2099-01-01T00:00:00.000Z', userId, email: `${role.toLowerCase()}@example.invalid`, role })
 const doctor = { id: doctorId, userId, fullName: 'Dr. Trần Minh Long With A Responsive Name', departmentId,
-  departmentName: 'Internal Medicine', specialization: 'General medicine', isActive: true }
+  departmentName: 'Internal Medicine', specialization: 'General medicine', email: 'doctor@example.invalid', phone: null,
+  licenseNumber: 'LIC-100', yearsOfExperience: 10, biography: null, avatarUrl: null, isActive: true,
+  createdAt: '2026-11-09T01:00:00Z', updatedAt: null }
 const appointment = { id: appointmentId, patientProfileId: profileId, patientName: 'Nguyễn Minh An', doctorId,
   doctorName: doctor.fullName, departmentId, departmentName: doctor.departmentName, appointmentDate: '2026-10-29',
   startTime: '09:00:00', endTime: '09:30:00', symptoms: 'Synthetic browser-only symptoms', status: 'Pending',
@@ -39,9 +45,13 @@ async function installMocks(page, role = 'Doctor') {
     assert.equal(request.method(), 'GET', `Mocked browser test attempted mutation: ${request.method()} ${url.pathname}`)
     const body = url.pathname.toLowerCase() === '/api/auth/me' ? { userId, email: `${role.toLowerCase()}@example.invalid`, role }
       : url.pathname.toLowerCase() === '/api/doctors' ? [doctor]
+        : url.pathname.toLowerCase() === `/api/doctors/${doctorId}` ? doctor
+        : url.pathname.toLowerCase() === '/api/departments' ? [department]
+          : url.pathname.toLowerCase() === '/api/doctor-schedules' ? [schedule]
         : url.pathname.toLowerCase() === `/api/appointments/${appointmentId}` ? appointment
           : url.pathname.toLowerCase() === `/api/appointments/${clinicalAppointmentId}` ? clinicalAppointment
             : url.pathname.toLowerCase() === '/api/appointments' ? [appointment, clinicalAppointment]
+              : url.pathname.toLowerCase() === '/api/queue/doctor' ? []
             : null
     assert.notEqual(body, null, `Unexpected API request: ${url.pathname}`)
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
@@ -77,6 +87,37 @@ async function run() {
     await installMocks(adminPage, 'Admin')
     await adminPage.goto(`${baseUrl}/doctor/dashboard`)
     await adminPage.getByText('Doctor access is required for this page.').waitFor()
+    await adminPage.goto(`${baseUrl}/admin/departments`)
+    await adminPage.getByRole('heading', { name: 'Departments', level: 1 }).waitFor()
+    await adminPage.getByRole('heading', { name: 'Internal Medicine', level: 2 }).waitFor()
+    await adminPage.getByRole('button', { name: 'Add department' }).click()
+    const departmentDialog = adminPage.getByRole('dialog', { name: 'Add department' })
+    await departmentDialog.waitFor()
+    assert.equal(await departmentDialog.evaluate(node => node.contains(document.activeElement)), true)
+    await adminPage.keyboard.press('Escape')
+    await departmentDialog.waitFor({ state: 'hidden' })
+    await adminPage.goto(`${baseUrl}/admin/doctors`)
+    await adminPage.getByRole('heading', { name: 'Doctors', level: 1 }).waitFor()
+    await adminPage.getByRole('heading', { name: doctor.fullName, level: 2 }).waitFor()
+    await adminPage.getByRole('combobox', { name: 'Status' }).click()
+    await adminPage.getByRole('option', { name: 'Inactive' }).click()
+    await adminPage.getByText('No Doctors match the selected filters.').waitFor()
+    await adminPage.getByRole('combobox', { name: 'Status' }).click()
+    await adminPage.getByRole('option', { name: 'All statuses' }).click()
+    await adminPage.getByRole('button', { name: 'Add Doctor' }).click()
+    const doctorDialog = adminPage.getByRole('dialog', { name: 'Add Doctor' })
+    await doctorDialog.waitFor()
+    assert.equal(await doctorDialog.evaluate(node => node.contains(document.activeElement)), true)
+    await adminPage.keyboard.press('Escape')
+    await doctorDialog.waitFor({ state: 'hidden' })
+    await adminPage.getByRole('link', { name: 'Schedules' }).click()
+    await adminPage.getByRole('heading', { name: /Schedules/, level: 1 }).waitFor()
+    await adminPage.getByRole('heading', { name: 'Monday', level: 2 }).waitFor()
+    await adminPage.getByRole('button', { name: 'Add schedule' }).click()
+    const scheduleDialog = adminPage.getByRole('dialog', { name: 'Add schedule' })
+    await scheduleDialog.getByText(/Preview: Monday/).waitFor()
+    await adminPage.keyboard.press('Escape')
+    await scheduleDialog.waitFor({ state: 'hidden' })
     await admin.close()
 
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } })
@@ -107,7 +148,7 @@ async function run() {
     await page.getByRole('heading', { name: 'Clinical Examination', level: 1 }).waitFor()
     await page.getByLabel('Chief Complaint (required to finalize)').fill('Persistent headache')
     await page.getByLabel('Diagnosis (required to finalize)').fill('Clinical review pending')
-    const reviewTrigger = page.getByRole('button', { name: 'Review entered information' })
+    const reviewTrigger = page.getByRole('button', { name: 'Review and finalize' })
     await reviewTrigger.click()
     const reviewDialog = page.getByRole('dialog', { name: 'Review clinical information' })
     await reviewDialog.waitFor()
@@ -115,7 +156,7 @@ async function run() {
     await page.keyboard.press('Escape')
     await reviewDialog.waitFor({ state: 'hidden' })
     assert.equal(await reviewTrigger.evaluate(node => node === document.activeElement), true)
-    assert.equal(await page.getByRole('button', { name: 'Save Draft unavailable' }).isDisabled(), true)
+    assert.equal(await page.getByRole('button', { name: 'Save Draft' }).isDisabled(), true)
     assert.equal(await page.getByRole('button', { name: 'Finalize unavailable' }).isDisabled(), true)
     await page.getByRole('link', { name: 'Back to appointment' }).first().click()
     await page.getByRole('dialog', { name: 'Discard unsaved clinical content?' }).waitFor()
@@ -128,7 +169,7 @@ async function run() {
     await new Promise(resolve => { if (server.exitCode !== null) resolve(); else { server.once('exit', resolve); setTimeout(resolve, 3000) } })
   }
   if (serverErrors && !/ExperimentalWarning/.test(serverErrors)) process.stderr.write(serverErrors)
-  console.log('Mocked browser acceptance: 4/4 PASS (guards, Doctor mobile, confirmation focus, clinical workspace safety).')
+  console.log('Mocked browser acceptance: 7/7 PASS (guards, Admin departments, Admin Doctors, Admin schedules, Doctor mobile, confirmation focus, clinical workspace safety).')
 }
 
 run().catch(error => { console.error(error instanceof Error ? error.message : 'Mocked browser acceptance failed.'); process.exitCode = 1 })

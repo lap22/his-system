@@ -8,6 +8,7 @@ using HIS.Api.Services.Implementations;
 using HIS.Api.Services.Interfaces;
 using HIS.Api.Services.PatientProfiles;
 using HIS.Api.Settings;
+using HIS.Api.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -111,12 +112,16 @@ builder.Services.AddSignalR()
             new JsonStringEnumConverter());
     });
 builder.Services.AddScoped<IQueueNotifier, SignalRQueueNotifier>();
+builder.Services.AddSingleton<IDoctorQueueConnectionRegistry, DoctorQueueConnectionRegistry>();
+builder.Services.AddScoped<IDoctorQueueAuthorizationReader, EfDoctorQueueAuthorizationReader>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();
 builder.Services.AddScoped<IDoctorScheduleService,DoctorScheduleService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 builder.Services.AddScoped<IQueueService, QueueService>();
+builder.Services.AddScoped<IUserAccountStatusReader, EfUserAccountStatusReader>();
+builder.Services.AddScoped<ActiveUserTokenValidator>();
 
 // ============================================================
 // 6. Authentication - JWT Bearer
@@ -172,31 +177,19 @@ builder.Services
 
                 return Task.CompletedTask;
             },
-            OnAuthenticationFailed = context =>
+            OnTokenValidated = async context =>
             {
-                Console.WriteLine(
-                    $"JWT Authentication Failed: {context.Exception.Message}"
-                );
+                var validator = context.HttpContext.RequestServices
+                    .GetRequiredService<ActiveUserTokenValidator>();
 
-                return Task.CompletedTask;
-            },
+                var active = await validator.IsAuthorizedAsync(
+                    context.Principal,
+                    context.HttpContext.RequestAborted);
 
-            OnChallenge = context =>
-            {
-                Console.WriteLine(
-                    $"JWT Challenge: {context.Error} - {context.ErrorDescription}"
-                );
-
-                return Task.CompletedTask;
-            },
-
-            OnTokenValidated = context =>
-            {
-                Console.WriteLine(
-                    "JWT validated successfully."
-                );
-
-                return Task.CompletedTask;
+                if (!active)
+                {
+                    context.Fail("Account is unavailable.");
+                }
             }
         };
     });

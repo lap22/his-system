@@ -356,3 +356,24 @@ test('queue page shows manual fallback, loading/error/empty states and status fi
   query = { ...query, isSuccess: false, isPending: true }; assert.match(render(Page), /Loading queue/)
   query = { ...query, isPending: false, isError: true, error: reject(409) }; assert.match(render(Page), /changed concurrently/)
 })
+
+test('dashboard queue summary selects the active examination and next called or waiting patient', () => {
+  const { queueDashboardSummary } = loader()('src/types/doctorQueue.ts')
+  const rows = [entry({ queueNumber: 4 }), entry({ id: appointmentId, queueNumber: 2, status: 'Called' }),
+    entry({ id: '55555555-5555-4555-8555-555555555555', queueNumber: 3, status: 'InService' }),
+    entry({ id: '66666666-6666-4666-8666-666666666666', queueNumber: 1, status: 'Completed' })]
+  const summary = queueDashboardSummary(rows)
+  assert.deepEqual({ total: summary.total, waiting: summary.waiting, called: summary.called,
+    inService: summary.inService, completed: summary.completed },
+  { total: 4, waiting: 1, called: 1, inService: 1, completed: 1 })
+  assert.equal(summary.current.queueNumber, 3)
+  assert.equal(summary.next.queueNumber, 2)
+})
+
+test('dashboard integrates today queue, realtime invalidation and appointment navigation without queue mutations', () => {
+  const source = readFileSync(path.resolve(__dirname, '../src/pages/DoctorDashboard.tsx'), 'utf8')
+  assert.match(source, /useDoctorQueue\(today\)/); assert.match(source, /useQueueRealtime\(\)/)
+  assert.match(source, /Current patient/); assert.match(source, /Next patient/); assert.match(source, /Open Queue/)
+  assert.match(source, /appointments\/\$\{queueSummary\.current\.appointmentId\}/)
+  assert.doesNotMatch(source, /doctorQueueApi\.act|useQueueAction|Call Patient|Complete Queue Entry/)
+})

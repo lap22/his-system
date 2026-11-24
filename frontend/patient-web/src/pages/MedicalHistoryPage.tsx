@@ -3,7 +3,11 @@ import { Alert, Box, Button, Card, CardContent, FormControl, InputLabel, MenuIte
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePatientProfiles } from '../hooks/usePatientProfiles'
+import { useMedicalHistory } from '../hooks/useMedicalHistory'
 import { useAuth } from '../hooks/useAuth'
+import { MedicalRecordDetail } from '../components/medicalHistory/MedicalRecordDetail'
+import { clinicalApiEnabled } from '../services/clinicalFeature'
+import { medicalHistoryError } from '../services/medicalRecordsApi'
 import { profileErrorMessage } from '../services/patientProfilesApi'
 import { nextOwnedProfileId } from '../utils/medicalHistory'
 
@@ -13,6 +17,7 @@ export function MedicalHistoryPage() {
   const [profileId, setProfileId] = useState('')
   const effectiveProfileId = nextOwnedProfileId(profileId, profiles.data ?? [])
   const selectedProfile = profiles.data?.find((profile) => profile.id === effectiveProfileId)
+  const records = useMedicalHistory(effectiveProfileId)
 
   return <Box sx={{ display: 'grid', gap: 3 }}>
     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -23,8 +28,8 @@ export function MedicalHistoryPage() {
       </Box>
     </Box>
 
-    <Alert severity="info">Electronic medical records are not yet available. No appointment information is presented as clinical history.</Alert>
-    <Typography>When this feature becomes available, only finalized records authorized for the selected Patient Profile will appear here.</Typography>
+    {!clinicalApiEnabled ? <Alert severity="info">Electronic medical records are currently disabled. No unavailable endpoint will be called.</Alert> : null}
+    <Typography>Only finalized records authorized for the selected Patient Profile appear here.</Typography>
 
     {profiles.isPending ? <Box role="status" aria-label="Loading patient profiles" sx={{ display: 'grid', gap: 1 }}>
       <Skeleton height={56} /><Skeleton height={160} />
@@ -52,7 +57,13 @@ export function MedicalHistoryPage() {
         ? `Selected profile: ${selectedProfile.fullName}`
         : 'Select an available Patient Profile.'}</Typography>
       <Box key={`${auth.user?.userId ?? 'anonymous'}:${effectiveProfileId}`} aria-label="Medical record list" aria-live="polite" sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' } }}>
-        <Alert severity="info">No electronic medical records are available for display.</Alert>
+        {records.isPending && clinicalApiEnabled ? <Box role="status" aria-label="Loading medical records"><Skeleton height={180} /><span>Loading medical records…</span></Box> : null}
+        {records.isError ? <Alert severity="error" action={<Button disabled={records.isFetching} onClick={() => { void records.refetch() }}>Retry records</Button>}>
+          {medicalHistoryError(records.error)}
+        </Alert> : null}
+        {!clinicalApiEnabled || (!records.isPending && !records.isError && records.data?.length === 0)
+          ? <Alert severity="info">No finalized electronic medical records are available for display.</Alert> : null}
+        {selectedProfile ? records.data?.map(record => <MedicalRecordDetail key={record.id} record={record} patientName={selectedProfile.fullName} />) : null}
       </Box>
     </CardContent></Card>
 

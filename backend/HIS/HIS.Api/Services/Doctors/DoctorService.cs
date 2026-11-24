@@ -2,6 +2,7 @@
 using HIS.Api.DTOs.Doctors;
 using HIS.Api.Entities;
 using HIS.Api.Enums;
+using HIS.Api.Hubs;
 using Microsoft.EntityFrameworkCore;
 
 namespace HIS.Api.Services.Doctors;
@@ -9,10 +10,14 @@ namespace HIS.Api.Services.Doctors;
 public class DoctorService : IDoctorService
 {
     private readonly AppDbContext _dbContext;
+    private readonly IDoctorQueueConnectionRegistry _queueConnections;
 
-    public DoctorService(AppDbContext dbContext)
+    public DoctorService(
+        AppDbContext dbContext,
+        IDoctorQueueConnectionRegistry queueConnections)
     {
         _dbContext = dbContext;
+        _queueConnections = queueConnections;
     }
 
     public async Task<List<DoctorResponse>> GetAllAsync(
@@ -247,15 +252,21 @@ public class DoctorService : IDoctorService
             return null;
         }
 
-        doctor.IsActive = request.IsActive;
+        await _queueConnections.PersistStatusAndRevokeAsync(
+            doctor.UserId,
+            request.IsActive,
+            async () =>
+            {
+                doctor.IsActive = request.IsActive;
 
-        // Đồng bộ trạng thái tài khoản
-        doctor.User.IsActive = request.IsActive;
+                // Đồng bộ trạng thái tài khoản
+                doctor.User.IsActive = request.IsActive;
 
-        doctor.UpdatedAt = DateTime.UtcNow;
-        doctor.User.UpdatedAt = DateTime.UtcNow;
+                doctor.UpdatedAt = DateTime.UtcNow;
+                doctor.User.UpdatedAt = DateTime.UtcNow;
 
-        await _dbContext.SaveChangesAsync();
+                await _dbContext.SaveChangesAsync();
+            });
 
         return MapToResponse(doctor);
     }

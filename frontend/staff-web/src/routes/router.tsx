@@ -8,6 +8,7 @@ import { PortalRouteError } from '../components/PortalRouteError'
 
 import { NotFound } from '../pages/NotFound'
 import { StaffLanding } from '../pages/StaffLanding'
+import { AdminBoundary } from '../components/AdminBoundary'
 
 const doctorRouteFallback = <div role="status" aria-live="polite">Loading Doctor Portal…</div>
 
@@ -47,6 +48,17 @@ export const router = createBrowserRouter([
     { path: '/', element: <AppLayout />, children: [
       { index: true, element: <StaffLanding /> },
       { path: 'dashboard', element: <Navigate replace to="/" /> },
+      { element: <AdminBoundary />, children: [
+        { path: 'admin/departments', lazy: async () => ({
+          Component: (await import('../pages/AdminDepartmentsPage')).AdminDepartmentsPage,
+        }) },
+        { path: 'admin/doctors', lazy: async () => ({
+          Component: (await import('../pages/AdminDoctorsPage')).AdminDoctorsPage,
+        }) },
+        { path: 'admin/doctors/:doctorId/schedules', lazy: async () => ({
+          Component: (await import('../pages/AdminDoctorSchedulesPage')).AdminDoctorSchedulesPage,
+        }) },
+      ] },
       { path: '*', element: <NotFound /> },
     ] },
   ] },

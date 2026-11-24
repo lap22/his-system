@@ -1,19 +1,25 @@
 import Dashboard from '@mui/icons-material/Dashboard'
 import LocalHospital from '@mui/icons-material/LocalHospital'
+import Business from '@mui/icons-material/Business'
+import MedicalServices from '@mui/icons-material/MedicalServices'
 import Logout from '@mui/icons-material/Logout'
 import { Alert, AppBar, Box, Button, Container, Toolbar, Typography } from '@mui/material'
 import { Link as RouterLink, Outlet } from 'react-router-dom'
 import { useLogout } from '../hooks/useAuth'
 import { authErrorMessage } from '../services/apiClient'
 import { portal } from '../services/portal'
+import { useAuth } from '../hooks/useAuth'
 export function AppLayout() {
   const logout = useLogout()
+  const { user } = useAuth()
   return <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
     <AppBar color="inherit" elevation={0} position="sticky" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
       <Toolbar sx={{ gap: 2, flexWrap: 'wrap', py: 1 }}>
         <LocalHospital color="primary" />
         <Typography sx={{ fontWeight: 800, flex: 1 }}>{portal.name}</Typography>
         <Button component={RouterLink} to="/" startIcon={<Dashboard />}>Dashboard</Button>
+        {user?.role === 'Admin' ? <Button component={RouterLink} to="/admin/departments" startIcon={<Business />}>Departments</Button> : null}
+        {user?.role === 'Admin' ? <Button component={RouterLink} to="/admin/doctors" startIcon={<MedicalServices />}>Doctors</Button> : null}
         <Button startIcon={<Logout />} onClick={() => logout.mutate()} disabled={logout.isPending}>Sign out</Button>
       </Toolbar>
     </AppBar>

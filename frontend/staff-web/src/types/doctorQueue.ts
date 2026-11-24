@@ -18,3 +18,16 @@ export const queueStatusLabels = { Waiting: 'Waiting', Called: 'Called', InServi
 export function availableQueueAction(status: QueueStatus): QueueAction | undefined {
   return status === 'Waiting' ? 'call' : status === 'Called' ? 'start' : status === 'InService' ? 'complete' : undefined
 }
+
+export function queueDashboardSummary(rows: readonly QueueEntry[]) {
+  const ordered = [...rows].sort((a, b) => a.queueNumber - b.queueNumber)
+  return {
+    total: ordered.length,
+    waiting: ordered.filter(row => row.status === 'Waiting').length,
+    called: ordered.filter(row => row.status === 'Called').length,
+    inService: ordered.filter(row => row.status === 'InService').length,
+    completed: ordered.filter(row => row.status === 'Completed').length,
+    current: ordered.find(row => row.status === 'InService') ?? null,
+    next: ordered.find(row => row.status === 'Called') ?? ordered.find(row => row.status === 'Waiting') ?? null,
+  }
+}
